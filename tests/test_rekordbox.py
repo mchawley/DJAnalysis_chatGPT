@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 from models.track import Track
 from modules.rekordbox.importer import RekordboxImporter
 from modules.rekordbox.analysis_importer import RekordboxAnalysisImporter
-from modules.rekordbox.anlz import RekordboxAnlzParser
+from modules.rekordbox.anlz import RekordboxAnalysis, RekordboxAnlzParser
 from modules.rekordbox.database import RekordboxDatabaseAnalysisReader
 from modules.rekordbox.matcher import RekordboxMatcher
 from modules.rekordbox.parser import RekordboxParser
@@ -112,6 +112,28 @@ class RekordboxAnlzParserTest(unittest.TestCase):
         self.assertEqual(document["metadata"], {"title": "Existing"})
         self.assertEqual(document["analysis"]["provider"], "rekordbox")
         self.assertEqual(document["analysis"]["waveformDetail"], [7, 14])
+
+    def test_importer_preserves_existing_waveforms_when_not_reparsed(self):
+        document = {
+            "analysis": {
+                "waveformPreview": [3, 9],
+                "waveformDetail": [7, 14],
+            }
+        }
+        analysis = RekordboxAnalysis(
+            location="/Users/DJ/Track One.mp3",
+            beat_positions=[0.0],
+            beat_numbers=[1],
+            bpms=[122.0],
+            phrases=[{"index": 1, "startBeat": 1, "kind": 1}],
+        )
+
+        RekordboxAnalysisImporter().import_analysis(document, analysis)
+
+        self.assertEqual(document["analysis"]["waveformPreview"], [3, 9])
+        self.assertEqual(document["analysis"]["waveformDetail"], [7, 14])
+        self.assertEqual(document["analysis"]["beatPositions"], [0.0])
+        self.assertEqual(len(document["analysis"]["phrases"]), 1)
 
     def test_skips_unreadable_anlz_files(self):
         class FakeAnlzFile:

@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 class Pipeline:
     REKORDBOX_LIBRARY_VERSION = "3.0"
-    REKORDBOX_ANALYSIS_VERSION = "4.0"
+    REKORDBOX_ANALYSIS_VERSION = "5.0"
 
     def run(self):
         cfg=Config().data
