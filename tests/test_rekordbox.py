@@ -127,6 +127,24 @@ class RekordboxAnlzParserTest(unittest.TestCase):
         self.assertEqual(len(parser.errors), 1)
         self.assertEqual(parser.errors[0][0], anlz_path)
 
+    def test_skips_anlz_files_with_unreadable_tags(self):
+        class FakeAnlz:
+            def get(self, name):
+                raise IndexError("invalid tag")
+
+        class FakeAnlzFile:
+            @staticmethod
+            def parse_file(path):
+                return FakeAnlz()
+
+        with TemporaryDirectory() as directory:
+            anlz_path = Path(directory) / "ANLZ0000.DAT"
+            anlz_path.write_bytes(b"fixture")
+            parser = RekordboxAnlzParser(FakeAnlzFile)
+            self.assertEqual(parser.parse_directory(directory), {})
+
+        self.assertEqual(parser.errors[0][0], anlz_path)
+
 
 if __name__ == "__main__":
     unittest.main()
