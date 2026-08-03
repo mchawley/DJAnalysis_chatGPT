@@ -15,6 +15,9 @@ from pathlib import Path
 from tqdm import tqdm
 
 class Pipeline:
+    REKORDBOX_LIBRARY_VERSION = "1.0"
+    REKORDBOX_ANALYSIS_VERSION = "1.0"
+
     def run(self):
         cfg=Config().data
         log=Logger()
@@ -34,7 +37,9 @@ class Pipeline:
         metadata_failed = 0
         rekordbox_imported = 0
         rekordbox_unmatched = 0
+        rekordbox_skipped = 0
         analysis_imported = 0
+        analysis_skipped = 0
         duplicates = 0
         states = {"new": 0, "modified": 0, "moved": 0, "unchanged": 0}
         replaced_track_ids = set()
@@ -83,17 +88,31 @@ class Pipeline:
                             f"[ERROR] Metadata failed for {t.path}: "
                             f"{type(error).__name__}: {error}"
                         )
-                if rekordbox_matcher:
+                if rekordbox_matcher and not self._module_is_current(
+                    doc, "rekordbox_library", self.REKORDBOX_LIBRARY_VERSION
+                ):
                     rekordbox_match = rekordbox_matcher.match(t, doc)
                     if rekordbox_match.track:
                         rekordbox_importer.import_track(doc, rekordbox_match.track)
+                        self._mark_module_complete(
+                            doc, "rekordbox_library", self.REKORDBOX_LIBRARY_VERSION
+                        )
                         rekordbox_imported += 1
                     else:
                         rekordbox_unmatched += 1
+                elif rekordbox_matcher:
+                    rekordbox_skipped += 1
                 analysis = rekordbox_analyses.get(self._normalise_path(t.path))
-                if analysis:
+                if analysis and not self._module_is_current(
+                    doc, "rekordbox_analysis", self.REKORDBOX_ANALYSIS_VERSION
+                ):
                     analysis_importer.import_analysis(doc, analysis)
+                    self._mark_module_complete(
+                        doc, "rekordbox_analysis", self.REKORDBOX_ANALYSIS_VERSION
+                    )
                     analysis_imported += 1
+                elif analysis:
+                    analysis_skipped += 1
                 jm.save(tid,doc)
                 current_tracks[tid] = entry
                 states[state] += 1
@@ -108,8 +127,10 @@ class Pipeline:
         if rekordbox_matcher:
             log.info(f'Rekordbox imported: {rekordbox_imported}')
             log.info(f'Rekordbox unmatched: {rekordbox_unmatched}')
+            log.info(f'Rekordbox skipped  : {rekordbox_skipped}')
         if rekordbox_analyses:
             log.info(f'Rekordbox analysis: {analysis_imported}')
+            log.info(f'Analysis skipped   : {analysis_skipped}')
         log.info(f'Duplicates         : {duplicates}')
         log.info(f'New               : {states["new"]}')
         log.info(f'Modified          : {states["modified"]}')
@@ -137,8 +158,12 @@ class Pipeline:
     def _load_rekordbox_analyses(cls, anlz_root, log):
         if not anlz_root:
             return {}
+        path = Path(anlz_root).expanduser()
+        if not path.is_dir():
+            log.error(f"Rekordbox ANLZ directory does not exist: {anlz_root}")
+            return {}
         try:
-            analyses = RekordboxAnlzParser().parse_directory(anlz_root)
+            analyses = RekordboxAnlzParser().parse_directory(path)
         except Exception as error:
             log.error(
                 f"Could not read Rekordbox ANLZ files at {anlz_root}: "
@@ -152,3 +177,17 @@ class Pipeline:
     @staticmethod
     def _normalise_path(path):
         return str(Path(path)).replace("\\", "/").casefold()
+
+    @staticmethod
+    def _module_is_current(document, module_name, version):
+        status = document.get("system", {}).get("modules", {}).get(module_name, {})
+        return status.get("completed") is True and status.get("version") == version
+
+    @staticmethod
+    def _mark_module_complete(document, module_name, version):
+        modules = document.setdefault("system", {}).setdefault("modules", {})
+        modules[module_name] = {
+            "version": version,
+            "completed": True,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
