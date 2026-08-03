@@ -1,2 +1,3 @@
 mutagen>=1.47
 tqdm>=4.66
+pyrekordbox>=0.4.4

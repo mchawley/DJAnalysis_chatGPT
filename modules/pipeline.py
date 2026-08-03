@@ -8,6 +8,8 @@ from modules.metadata_plugin import MetadataPlugin
 from modules.rekordbox.importer import RekordboxImporter
 from modules.rekordbox.matcher import RekordboxMatcher
 from modules.rekordbox.parser import RekordboxParser
+from modules.rekordbox.analysis_importer import RekordboxAnalysisImporter
+from modules.rekordbox.anlz import RekordboxAnlzParser
 from datetime import datetime, timezone
 from pathlib import Path
 from tqdm import tqdm
@@ -22,6 +24,8 @@ class Pipeline:
         metadata_plugin = MetadataPlugin()
         rekordbox_matcher = self._load_rekordbox_matcher(cfg.get("rekordboxXmlPath"), log)
         rekordbox_importer = RekordboxImporter()
+        rekordbox_analyses = self._load_rekordbox_analyses(cfg.get("rekordboxAnlzRoot"), log)
+        analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
         tracks=scanner.scan()
         current_tracks = {}
@@ -30,6 +34,7 @@ class Pipeline:
         metadata_failed = 0
         rekordbox_imported = 0
         rekordbox_unmatched = 0
+        analysis_imported = 0
         duplicates = 0
         states = {"new": 0, "modified": 0, "moved": 0, "unchanged": 0}
         replaced_track_ids = set()
@@ -85,6 +90,10 @@ class Pipeline:
                         rekordbox_imported += 1
                     else:
                         rekordbox_unmatched += 1
+                analysis = rekordbox_analyses.get(self._normalise_path(t.path))
+                if analysis:
+                    analysis_importer.import_analysis(doc, analysis)
+                    analysis_imported += 1
                 jm.save(tid,doc)
                 current_tracks[tid] = entry
                 states[state] += 1
@@ -99,6 +108,8 @@ class Pipeline:
         if rekordbox_matcher:
             log.info(f'Rekordbox imported: {rekordbox_imported}')
             log.info(f'Rekordbox unmatched: {rekordbox_unmatched}')
+        if rekordbox_analyses:
+            log.info(f'Rekordbox analysis: {analysis_imported}')
         log.info(f'Duplicates         : {duplicates}')
         log.info(f'New               : {states["new"]}')
         log.info(f'Modified          : {states["modified"]}')
@@ -121,3 +132,23 @@ class Pipeline:
 
         log.info(f"Loaded {len(rekordbox_tracks)} Rekordbox tracks")
         return RekordboxMatcher(rekordbox_tracks)
+
+    @classmethod
+    def _load_rekordbox_analyses(cls, anlz_root, log):
+        if not anlz_root:
+            return {}
+        try:
+            analyses = RekordboxAnlzParser().parse_directory(anlz_root)
+        except Exception as error:
+            log.error(
+                f"Could not read Rekordbox ANLZ files at {anlz_root}: "
+                f"{type(error).__name__}: {error}"
+            )
+            return {}
+
+        log.info(f"Loaded {len(analyses)} Rekordbox analysis records")
+        return {cls._normalise_path(path): analysis for path, analysis in analyses.items()}
+
+    @staticmethod
+    def _normalise_path(path):
+        return str(Path(path)).replace("\\", "/").casefold()

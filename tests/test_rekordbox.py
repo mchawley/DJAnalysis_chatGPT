@@ -4,6 +4,8 @@ from tempfile import TemporaryDirectory
 
 from models.track import Track
 from modules.rekordbox.importer import RekordboxImporter
+from modules.rekordbox.analysis_importer import RekordboxAnalysisImporter
+from modules.rekordbox.anlz import RekordboxAnlzParser
 from modules.rekordbox.matcher import RekordboxMatcher
 from modules.rekordbox.parser import RekordboxParser
 
@@ -74,6 +76,41 @@ class RekordboxParserTest(unittest.TestCase):
         self.assertEqual(document["library"]["playlists"], ["ROOT / Warmup"])
         self.assertEqual(document["library"]["memoryCues"][0]["color"], "#FF0000")
         self.assertEqual(document["library"]["hotCues"][0]["number"], 2)
+
+
+class RekordboxAnlzParserTest(unittest.TestCase):
+    def test_reads_analysis_with_pyrekordbox_adapter(self):
+        class FakeAnlz:
+            def get(self, name):
+                return {
+                    "path": "/Users/DJ/Track One.mp3",
+                    "beat_grid": ([1, 2], [122.0, 122.0], [0.0, 0.492]),
+                    "wf_preview": ([3, 9, 12], [0, 0, 0]),
+                    "wf_detail": ([7, 14], [0, 0]),
+                    "structure": {"entries": [{"start": 0, "mood": "intro"}]},
+                }.get(name)
+
+        class FakeAnlzFile:
+            @staticmethod
+            def parse_file(path):
+                return FakeAnlz()
+
+        with TemporaryDirectory() as directory:
+            anlz_path = Path(directory) / "ANLZ0000.DAT"
+            anlz_path.write_bytes(b"fixture")
+            analysis = RekordboxAnlzParser(FakeAnlzFile).parse_directory(directory)[
+                "/Users/DJ/Track One.mp3"
+            ]
+
+        self.assertEqual(analysis.beat_positions, [0.0, 0.492])
+        self.assertEqual(analysis.waveform_preview, [3, 9, 12])
+        self.assertEqual(analysis.phrases, [{"start": 0, "mood": "intro"}])
+
+        document = {"metadata": {"title": "Existing"}}
+        RekordboxAnalysisImporter().import_analysis(document, analysis)
+        self.assertEqual(document["metadata"], {"title": "Existing"})
+        self.assertEqual(document["analysis"]["provider"], "rekordbox")
+        self.assertEqual(document["analysis"]["waveformDetail"], [7, 14])
 
 
 if __name__ == "__main__":
