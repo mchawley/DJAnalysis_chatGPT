@@ -1,0 +1,11 @@
+{
+  "musicRoot": "/Users/manishchawley/Music",
+  "outputRoot": "./output/tracks",
+  "supportedFormats": [
+    ".mp3",
+    ".flac",
+    ".wav",
+    ".aiff",
+    ".m4a"
+  ]
+}
