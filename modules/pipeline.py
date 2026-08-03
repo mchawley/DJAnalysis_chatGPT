@@ -9,14 +9,14 @@ from modules.rekordbox.importer import RekordboxImporter
 from modules.rekordbox.matcher import RekordboxMatcher
 from modules.rekordbox.parser import RekordboxParser
 from modules.rekordbox.analysis_importer import RekordboxAnalysisImporter
-from modules.rekordbox.anlz import RekordboxAnlzParser
+from modules.rekordbox.database import RekordboxDatabaseAnalysisReader
 from datetime import datetime, timezone
 from pathlib import Path
 from tqdm import tqdm
 
 class Pipeline:
     REKORDBOX_LIBRARY_VERSION = "1.0"
-    REKORDBOX_ANALYSIS_VERSION = "1.0"
+    REKORDBOX_ANALYSIS_VERSION = "2.0"
 
     def run(self):
         cfg=Config().data
@@ -29,7 +29,9 @@ class Pipeline:
         rekordbox_matcher = None
         rekordbox_xml_loaded = False
         rekordbox_importer = RekordboxImporter()
-        rekordbox_analyses = self._load_rekordbox_analyses(cfg.get("rekordboxAnlzRoot"), log)
+        rekordbox_analyses = self._load_rekordbox_analyses(
+            cfg.get("rekordboxDatabaseAnalysis", False), log
+        )
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
         tracks=scanner.scan()
@@ -176,26 +178,22 @@ class Pipeline:
         return RekordboxMatcher(rekordbox_tracks)
 
     @classmethod
-    def _load_rekordbox_analyses(cls, anlz_root, log):
-        if not anlz_root:
-            return {}
-        path = Path(anlz_root).expanduser()
-        if not path.is_dir():
-            log.error(f"Rekordbox ANLZ directory does not exist: {anlz_root}")
+    def _load_rekordbox_analyses(cls, enabled, log):
+        if not enabled:
             return {}
         try:
-            parser = RekordboxAnlzParser()
-            analyses = parser.parse_directory(path)
+            reader = RekordboxDatabaseAnalysisReader()
+            analyses = reader.read()
         except Exception as error:
             log.error(
-                f"Could not read Rekordbox ANLZ files at {anlz_root}: "
+                "Could not read Rekordbox analysis through MasterDatabase: "
                 f"{type(error).__name__}: {error}"
             )
             return {}
 
-        for file_path, error in parser.errors:
+        for location, analysis_type, error in reader.errors:
             log.error(
-                f"Could not read Rekordbox ANLZ file {file_path}: "
+                f"Could not read Rekordbox {analysis_type} analysis for {location}: "
                 f"{type(error).__name__}: {error}"
             )
         log.info(f"Loaded {len(analyses)} Rekordbox analysis records")

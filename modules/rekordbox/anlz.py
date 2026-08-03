@@ -37,23 +37,28 @@ class RekordboxAnlzParser:
                 location = self._tag(anlz, "path")
                 if not location:
                     continue
-                analysis = analyses.setdefault(
-                    str(location), RekordboxAnalysis(location=str(location))
+                analyses[str(location)] = self.extract(
+                    anlz, location, file_path, analyses.get(str(location))
                 )
-                analysis.source_files.append(str(file_path))
-                self._merge_beat_grid(
-                    analysis, self._tag(anlz, "beat_grid") or self._tag(anlz, "beat_grid2")
-                )
-                self._merge_waveform(analysis, self._tag(anlz, "wf_preview"), "waveform_preview")
-                self._merge_waveform(analysis, self._tag(anlz, "wf_detail"), "waveform_detail")
-                structure = self._tag(anlz, "structure")
-                if structure is not None:
-                    analysis.structure = self._serialise(structure)
-                    analysis.phrases = self._extract_phrases(analysis.structure)
             except Exception as error:
                 self.errors.append((file_path, error))
                 continue
         return analyses
+
+    def extract(self, anlz, location, source_file, analysis=None):
+        """Merge one parsed ANLZ object into a track analysis record."""
+        analysis = analysis or RekordboxAnalysis(location=str(location))
+        analysis.source_files.append(str(source_file))
+        self._merge_beat_grid(
+            analysis, self._tag(anlz, "beat_grid") or self._tag(anlz, "beat_grid2")
+        )
+        self._merge_waveform(analysis, self._tag(anlz, "wf_preview"), "waveform_preview")
+        self._merge_waveform(analysis, self._tag(anlz, "wf_detail"), "waveform_detail")
+        structure = self._tag(anlz, "structure")
+        if structure is not None:
+            analysis.structure = self._serialise(structure)
+            analysis.phrases = self._extract_phrases(analysis.structure)
+        return analysis
 
     @staticmethod
     def _load_parser():

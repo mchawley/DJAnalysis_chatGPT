@@ -2,7 +2,7 @@
   "musicRoot": "/Users/manishchawley/Music",
   "outputRoot": "./output/tracks",
   "rekordboxXmlPath": "./export.xml",
-  "rekordboxAnlzRoot": "~/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ/",
+  "rekordboxDatabaseAnalysis": true,
   "supportedFormats": [
     ".mp3",
     ".flac",

@@ -6,6 +6,7 @@ from models.track import Track
 from modules.rekordbox.importer import RekordboxImporter
 from modules.rekordbox.analysis_importer import RekordboxAnalysisImporter
 from modules.rekordbox.anlz import RekordboxAnlzParser
+from modules.rekordbox.database import RekordboxDatabaseAnalysisReader
 from modules.rekordbox.matcher import RekordboxMatcher
 from modules.rekordbox.parser import RekordboxParser
 
@@ -126,6 +127,38 @@ class RekordboxAnlzParserTest(unittest.TestCase):
 
         self.assertEqual(len(parser.errors), 1)
         self.assertEqual(parser.errors[0][0], anlz_path)
+
+
+class RekordboxDatabaseAnalysisReaderTest(unittest.TestCase):
+    def test_reads_only_analysis_linked_by_master_database(self):
+        class Content:
+            FolderPath = "/Users/DJ/Track One.mp3"
+            Filename = "Track One.mp3"
+
+        class FakeAnlz:
+            def get(self, name):
+                return {
+                    "beat_grid": ([1], [122.0], [0.0]),
+                    "wf_preview": ([3, 9], [0, 0]),
+                }.get(name)
+
+        class Database:
+            def get_content(self):
+                return [Content()]
+
+            def read_anlz_file(self, content, analysis_type):
+                return FakeAnlz() if analysis_type == "DAT" else None
+
+            def get_anlz_path(self, content, analysis_type):
+                return f"/analysis/ANLZ0000.{analysis_type}"
+
+        reader = RekordboxDatabaseAnalysisReader(database_factory=Database)
+        analyses = reader.read()
+
+        analysis = analyses["/Users/DJ/Track One.mp3"]
+        self.assertEqual(analysis.beat_positions, [0.0])
+        self.assertEqual(analysis.waveform_preview, [3, 9])
+        self.assertEqual(analysis.source_files, ["/analysis/ANLZ0000.DAT"])
 
     def test_skips_anlz_files_with_unreadable_tags(self):
         class FakeAnlz:
