@@ -25,7 +25,9 @@ class Pipeline:
         jm=JsonManager(cfg['outputRoot'])
         manifest_manager = ManifestManager(cfg['outputRoot'])
         metadata_plugin = MetadataPlugin()
-        rekordbox_matcher = self._load_rekordbox_matcher(cfg.get("rekordboxXmlPath"), log)
+        rekordbox_xml_path = cfg.get("rekordboxXmlPath")
+        rekordbox_matcher = None
+        rekordbox_xml_loaded = False
         rekordbox_importer = RekordboxImporter()
         rekordbox_analyses = self._load_rekordbox_analyses(cfg.get("rekordboxAnlzRoot"), log)
         analysis_importer = RekordboxAnalysisImporter()
@@ -88,19 +90,23 @@ class Pipeline:
                             f"[ERROR] Metadata failed for {t.path}: "
                             f"{type(error).__name__}: {error}"
                         )
-                if rekordbox_matcher and not self._module_is_current(
+                if rekordbox_xml_path and not self._module_is_current(
                     doc, "rekordbox_library", self.REKORDBOX_LIBRARY_VERSION
                 ):
-                    rekordbox_match = rekordbox_matcher.match(t, doc)
-                    if rekordbox_match.track:
-                        rekordbox_importer.import_track(doc, rekordbox_match.track)
-                        self._mark_module_complete(
-                            doc, "rekordbox_library", self.REKORDBOX_LIBRARY_VERSION
-                        )
-                        rekordbox_imported += 1
-                    else:
-                        rekordbox_unmatched += 1
-                elif rekordbox_matcher:
+                    if not rekordbox_xml_loaded:
+                        rekordbox_matcher = self._load_rekordbox_matcher(rekordbox_xml_path, log)
+                        rekordbox_xml_loaded = True
+                    if rekordbox_matcher:
+                        rekordbox_match = rekordbox_matcher.match(t, doc)
+                        if rekordbox_match.track:
+                            rekordbox_importer.import_track(doc, rekordbox_match.track)
+                            self._mark_module_complete(
+                                doc, "rekordbox_library", self.REKORDBOX_LIBRARY_VERSION
+                            )
+                            rekordbox_imported += 1
+                        else:
+                            rekordbox_unmatched += 1
+                elif rekordbox_xml_path:
                     rekordbox_skipped += 1
                 analysis = rekordbox_analyses.get(self._normalise_path(t.path))
                 if analysis and not self._module_is_current(
@@ -124,7 +130,7 @@ class Pipeline:
         log.info(f'Documents updated : {processed}')
         log.info(f'Metadata updated   : {metadata_updated}')
         log.info(f'Metadata failed    : {metadata_failed}')
-        if rekordbox_matcher:
+        if rekordbox_xml_path:
             log.info(f'Rekordbox imported: {rekordbox_imported}')
             log.info(f'Rekordbox unmatched: {rekordbox_unmatched}')
             log.info(f'Rekordbox skipped  : {rekordbox_skipped}')
@@ -163,7 +169,8 @@ class Pipeline:
             log.error(f"Rekordbox ANLZ directory does not exist: {anlz_root}")
             return {}
         try:
-            analyses = RekordboxAnlzParser().parse_directory(path)
+            parser = RekordboxAnlzParser()
+            analyses = parser.parse_directory(path)
         except Exception as error:
             log.error(
                 f"Could not read Rekordbox ANLZ files at {anlz_root}: "
@@ -171,6 +178,11 @@ class Pipeline:
             )
             return {}
 
+        for file_path, error in parser.errors:
+            log.error(
+                f"Could not read Rekordbox ANLZ file {file_path}: "
+                f"{type(error).__name__}: {error}"
+            )
         log.info(f"Loaded {len(analyses)} Rekordbox analysis records")
         return {cls._normalise_path(path): analysis for path, analysis in analyses.items()}
 

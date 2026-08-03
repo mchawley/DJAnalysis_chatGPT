@@ -22,15 +22,21 @@ class RekordboxAnlzParser:
 
     def __init__(self, anlz_file_class=None):
         self.anlz_file_class = anlz_file_class
+        self.errors = []
 
     def parse_directory(self, root_path):
         root = Path(root_path)
         parser = self.anlz_file_class or self._load_parser()
         analyses = {}
+        self.errors = []
         for file_path in sorted(root.rglob("ANLZ*")):
             if not file_path.is_file() or file_path.suffix.upper() not in self.EXTENSIONS:
                 continue
-            anlz = parser.parse_file(file_path)
+            try:
+                anlz = parser.parse_file(file_path)
+            except Exception as error:
+                self.errors.append((file_path, error))
+                continue
             location = self._tag(anlz, "path")
             if not location:
                 continue

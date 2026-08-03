@@ -153,6 +153,7 @@ class PipelineTest(unittest.TestCase):
             ]
 
             Pipeline().run()
+            Pipeline().run()
 
             document = JsonManager(output_directory).load("track-1")
             self.assertEqual(document["library"]["provider"], "rekordbox")
@@ -160,6 +161,7 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(
                 Pipeline._module_is_current(document, "rekordbox_library", "1.0")
             )
+            parser_class.return_value.parse.assert_called_once()
 
 
 if __name__ == "__main__":

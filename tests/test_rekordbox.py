@@ -112,6 +112,21 @@ class RekordboxAnlzParserTest(unittest.TestCase):
         self.assertEqual(document["analysis"]["provider"], "rekordbox")
         self.assertEqual(document["analysis"]["waveformDetail"], [7, 14])
 
+    def test_skips_unreadable_anlz_files(self):
+        class FakeAnlzFile:
+            @staticmethod
+            def parse_file(path):
+                raise IndexError("invalid analysis file")
+
+        with TemporaryDirectory() as directory:
+            anlz_path = Path(directory) / "ANLZ0000.DAT"
+            anlz_path.write_bytes(b"fixture")
+            parser = RekordboxAnlzParser(FakeAnlzFile)
+            self.assertEqual(parser.parse_directory(directory), {})
+
+        self.assertEqual(len(parser.errors), 1)
+        self.assertEqual(parser.errors[0][0], anlz_path)
+
 
 if __name__ == "__main__":
     unittest.main()
