@@ -17,16 +17,18 @@ class MetadataExtractor:
         if audio is None or audio.tags is None:
             return None
         for key in keys:
-            if key in audio.tags:
-                value=audio.tags[key]
-                try:
-                    if isinstance(value,list):
-                        return str(value[0])
-                    if hasattr(value,"text"):
-                        return str(value.text[0])
-                    return str(value)
-                except Exception:
-                    return str(value)
+            try:
+                value = audio.tags[key]
+            except (KeyError, TypeError, ValueError):
+                continue
+            try:
+                if isinstance(value,list):
+                    return str(value[0])
+                if hasattr(value,"text"):
+                    return str(value.text[0])
+                return str(value)
+            except Exception:
+                return str(value)
         return None
 
     def extract(self,path):
