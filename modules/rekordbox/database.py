@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from .anlz import RekordboxAnlzParser
@@ -9,11 +10,12 @@ from .raw_anlz import RawAnlzParser
 class RekordboxDatabaseAnalysisReader:
     """Read linked ANLZ files through Rekordbox's read-only MasterDatabase API."""
 
-    ANALYSIS_TYPES = ("DAT", "EXT", "EX2")
+    ANALYSIS_TYPES = ("DAT", "EXT")
 
     def __init__(self, database_factory=None):
         self.database_factory = database_factory
         self.errors = []
+        logging.getLogger("pyrekordbox.anlz.file").setLevel(logging.ERROR)
 
     def read(self):
         database = (self.database_factory or self._load_database_factory())()
@@ -25,15 +27,9 @@ class RekordboxDatabaseAnalysisReader:
             location = self._content_path(content)
             if not location:
                 continue
-            try:
-                analysis_files = database.read_anlz_files(content)
-            except (AttributeError, IndexError, KeyError, TypeError, ValueError):
-                # pyrekordbox 0.4.x cannot decode several Rekordbox 7 tags.
-                # Try every linked file independently; unsupported files are skipped.
-                analysis_files = self._read_analysis_files(database, content)
-            except Exception as error:
-                self.errors.append((location, "ANLZ", error))
-                analysis_files = {}
+            # Rekordbox 7's 2EX/3EX files are not decoded by pyrekordbox 0.4.x.
+            # DAT and EXT contain the stable beat-grid and phrase blocks we import.
+            analysis_files = self._read_analysis_files(database, content)
             for analysis_type, anlz in analysis_files.items():
                 try:
                     if anlz is None:
@@ -89,7 +85,7 @@ class RekordboxDatabaseAnalysisReader:
     @classmethod
     def _read_analysis_files(cls, database, content):
         files = {}
-        for analysis_type in ("DAT", "EXT", "2EX", "EX2"):
+        for analysis_type in cls.ANALYSIS_TYPES:
             try:
                 files[analysis_type] = database.read_anlz_file(content, analysis_type)
             except Exception:
