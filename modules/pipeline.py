@@ -4,6 +4,7 @@ from modules.scanner import Scanner
 from modules.registry import Registry
 from modules.json_manager import JsonManager
 from modules.manifest import ManifestManager
+from modules.metadata_plugin import MetadataPlugin
 from datetime import datetime
 
 class Pipeline:
@@ -13,10 +14,12 @@ class Pipeline:
         scanner=Scanner(cfg['musicRoot'],cfg['supportedFormats'])
         jm=JsonManager(cfg['outputRoot'])
         manifest_manager = ManifestManager(cfg['outputRoot'])
+        metadata_plugin = MetadataPlugin()
         previous_tracks = manifest_manager.load()['tracks']
         tracks=scanner.scan()
         current_tracks = {}
         processed=0
+        metadata_updated = 0
         states = {"new": 0, "modified": 0, "moved": 0, "unchanged": 0}
         replaced_track_ids = set()
         previous_ids_by_path = {
@@ -41,6 +44,9 @@ class Pipeline:
             system.setdefault("createdAt", datetime.utcnow().isoformat() + "Z")
             system["sourcePath"] = t.path
             system.setdefault("schemaVersion", "0.1")
+            if metadata_plugin.needs_processing(doc, t):
+                metadata_plugin.process(doc, t)
+                metadata_updated += 1
             jm.save(tid,doc)
             current_tracks[tid] = entry
             states[state] += 1
@@ -50,6 +56,7 @@ class Pipeline:
         manifest_manager.save(current_tracks)
 
         log.info(f'Documents updated : {processed}')
+        log.info(f'Metadata updated   : {metadata_updated}')
         log.info(f'New               : {states["new"]}')
         log.info(f'Modified          : {states["modified"]}')
         log.info(f'Moved             : {states["moved"]}')
