@@ -18,15 +18,19 @@ class RekordboxDatabaseAnalysisReader:
         logging.getLogger("pyrekordbox.anlz.file").setLevel(logging.ERROR)
 
     def read(self):
+        return dict(self.iter_analyses())
+
+    def iter_analyses(self):
+        """Yield one linked track analysis at a time to keep memory bounded."""
         database = (self.database_factory or self._load_database_factory())()
         parser = RekordboxAnlzParser()
-        analyses = {}
         self.errors = []
 
         for content in database.get_content():
             location = self._content_path(content)
             if not location:
                 continue
+            analysis = None
             # Rekordbox 7's 2EX/3EX files are not decoded by pyrekordbox 0.4.x.
             # DAT and EXT contain the stable beat-grid and phrase blocks we import.
             analysis_files = self._read_analysis_files(database, content)
@@ -35,9 +39,7 @@ class RekordboxDatabaseAnalysisReader:
                     if anlz is None:
                         continue
                     source_path = self._analysis_path(database, content, analysis_type)
-                    analyses[location] = parser.extract(
-                        anlz, location, source_path, analyses.get(location)
-                    )
+                    analysis = parser.extract(anlz, location, source_path, analysis)
                 except Exception as error:
                     if not self._is_unsupported_anlz_error(error):
                         self.errors.append((location, analysis_type, error))
@@ -48,9 +50,7 @@ class RekordboxDatabaseAnalysisReader:
                 beat_grid = RawAnlzParser().parse_beat_grid(dat_path) if dat_path else None
                 pssi = PssiParser().parse_file(ext_path) if ext_path else None
                 if beat_grid or pssi:
-                    analysis = analyses.setdefault(location, parser.extract(
-                        None, location, dat_path or ext_path
-                    ))
+                    analysis = analysis or parser.extract(None, location, dat_path or ext_path)
                     if beat_grid:
                         analysis.beat_numbers = beat_grid["beatNumbers"]
                         analysis.bpms = beat_grid["bpms"]
@@ -63,7 +63,8 @@ class RekordboxDatabaseAnalysisReader:
                         }
             except Exception as error:
                 self.errors.append((location, "PSSI", error))
-        return analyses
+            if analysis:
+                yield location, analysis
 
     @staticmethod
     def _load_database_factory():

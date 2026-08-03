@@ -32,13 +32,12 @@ class Pipeline:
         rekordbox_matcher = None
         rekordbox_xml_loaded = False
         rekordbox_importer = RekordboxImporter()
-        rekordbox_analyses = self._load_rekordbox_analyses(
-            cfg.get("rekordboxDatabaseAnalysis", False), log
-        )
+        rekordbox_analysis_enabled = cfg.get("rekordboxDatabaseAnalysis", False)
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
         tracks=scanner.scan()
         current_tracks = {}
+        track_ids_by_path = {}
         documents_updated = 0
         metadata_updated = 0
         metadata_failed = 0
@@ -125,23 +124,20 @@ class Pipeline:
                             rekordbox_unmatched += 1
                 elif rekordbox_library_enabled:
                     rekordbox_skipped += 1
-                analysis = rekordbox_analyses.get(self._normalise_path(t.path))
-                if analysis and not self._module_is_current(
-                    doc, "rekordbox_analysis", self.REKORDBOX_ANALYSIS_VERSION
-                ):
-                    analysis_importer.import_analysis(doc, analysis)
-                    self._mark_module_complete(
-                        doc, "rekordbox_analysis", self.REKORDBOX_ANALYSIS_VERSION
-                    )
-                    analysis_imported += 1
-                    document_changed = True
-                elif analysis:
-                    analysis_skipped += 1
                 if document_changed:
                     jm.save(tid,doc)
                     documents_updated += 1
                 current_tracks[tid] = entry
+                track_ids_by_path[self._normalise_path(t.path)] = tid
                 states[state] += 1
+
+        if rekordbox_analysis_enabled:
+            imported, skipped = self._import_rekordbox_analyses(
+                track_ids_by_path, jm, analysis_importer, log
+            )
+            analysis_imported += imported
+            analysis_skipped += skipped
+            documents_updated += imported
 
         deleted = set(previous_tracks) - set(current_tracks) - replaced_track_ids
         if current_tracks != previous_tracks:
@@ -154,7 +150,7 @@ class Pipeline:
             log.info(f'Rekordbox imported: {rekordbox_imported}')
             log.info(f'Rekordbox unmatched: {rekordbox_unmatched}')
             log.info(f'Rekordbox skipped  : {rekordbox_skipped}')
-        if rekordbox_analyses:
+        if rekordbox_analysis_enabled:
             log.info(f'Rekordbox analysis: {analysis_imported}')
             log.info(f'Analysis skipped   : {analysis_skipped}')
         log.info(f'Duplicates         : {duplicates}')
@@ -194,26 +190,43 @@ class Pipeline:
         return RekordboxMatcher(rekordbox_tracks)
 
     @classmethod
-    def _load_rekordbox_analyses(cls, enabled, log):
-        if not enabled:
-            return {}
+    def _import_rekordbox_analyses(cls, track_ids_by_path, json_manager, importer, log):
+        """Stream analysis records and persist matching documents immediately."""
+        imported = 0
+        skipped = 0
         try:
             reader = RekordboxDatabaseAnalysisReader()
-            analyses = reader.read()
+            analyses = reader.iter_analyses()
+            for location, analysis in analyses:
+                track_id = track_ids_by_path.get(cls._normalise_path(location))
+                if track_id is None:
+                    continue
+                document = json_manager.load(track_id)
+                if cls._module_is_current(
+                    document, "rekordbox_analysis", cls.REKORDBOX_ANALYSIS_VERSION
+                ):
+                    skipped += 1
+                    continue
+                importer.import_analysis(document, analysis)
+                cls._mark_module_complete(
+                    document, "rekordbox_analysis", cls.REKORDBOX_ANALYSIS_VERSION
+                )
+                json_manager.save(track_id, document)
+                imported += 1
         except Exception as error:
             log.error(
                 "Could not read Rekordbox analysis through MasterDatabase: "
                 f"{type(error).__name__}: {error}"
             )
-            return {}
+            return imported, skipped
 
         for location, analysis_type, error in reader.errors:
             log.error(
                 f"Could not read Rekordbox {analysis_type} analysis for {location}: "
                 f"{type(error).__name__}: {error}"
             )
-        log.info(f"Loaded {len(analyses)} Rekordbox analysis records")
-        return {cls._normalise_path(path): analysis for path, analysis in analyses.items()}
+        log.info(f"Rekordbox analysis streamed: {imported + skipped}")
+        return imported, skipped
 
     @staticmethod
     def _normalise_path(path):
