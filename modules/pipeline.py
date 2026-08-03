@@ -35,6 +35,7 @@ class Pipeline:
         rekordbox_analysis_enabled = cfg.get("rekordboxDatabaseAnalysis", False)
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
+        log.info("Scanning music library...")
         tracks=scanner.scan()
         current_tracks = {}
         track_ids_by_path = {}
@@ -54,6 +55,7 @@ class Pipeline:
             for track_id, entry in previous_tracks.items()
         }
         log.info(f'Found {len(tracks)} tracks')
+        log.info("Updating track documents and library metadata...")
         with tqdm(tracks, desc="Processing tracks", unit="track") as progress:
             for t in progress:
                 progress.set_postfix_str(Path(t.path).name, refresh=False)
@@ -178,6 +180,7 @@ class Pipeline:
 
     @staticmethod
     def _load_rekordbox_database_matcher(log):
+        log.info("Loading Rekordbox library metadata...")
         try:
             rekordbox_tracks = RekordboxDatabaseLibraryReader().read()
         except Exception as error:
@@ -197,22 +200,25 @@ class Pipeline:
         try:
             reader = RekordboxDatabaseAnalysisReader()
             analyses = reader.iter_analyses()
-            for location, analysis in analyses:
-                track_id = track_ids_by_path.get(cls._normalise_path(location))
-                if track_id is None:
-                    continue
-                document = json_manager.load(track_id)
-                if cls._module_is_current(
-                    document, "rekordbox_analysis", cls.REKORDBOX_ANALYSIS_VERSION
-                ):
-                    skipped += 1
-                    continue
-                importer.import_analysis(document, analysis)
-                cls._mark_module_complete(
-                    document, "rekordbox_analysis", cls.REKORDBOX_ANALYSIS_VERSION
-                )
-                json_manager.save(track_id, document)
-                imported += 1
+            log.info("Streaming Rekordbox analysis...")
+            with tqdm(analyses, desc="Importing Rekordbox analysis", unit="track") as progress:
+                for location, analysis in progress:
+                    progress.set_postfix_str(Path(location).name, refresh=False)
+                    track_id = track_ids_by_path.get(cls._normalise_path(location))
+                    if track_id is None:
+                        continue
+                    document = json_manager.load(track_id)
+                    if cls._module_is_current(
+                        document, "rekordbox_analysis", cls.REKORDBOX_ANALYSIS_VERSION
+                    ):
+                        skipped += 1
+                        continue
+                    importer.import_analysis(document, analysis)
+                    cls._mark_module_complete(
+                        document, "rekordbox_analysis", cls.REKORDBOX_ANALYSIS_VERSION
+                    )
+                    json_manager.save(track_id, document)
+                    imported += 1
         except Exception as error:
             log.error(
                 "Could not read Rekordbox analysis through MasterDatabase: "
