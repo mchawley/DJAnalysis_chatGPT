@@ -1,8 +1,13 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import Mock, patch
 
 from models.track import Track
+from modules.json_manager import JsonManager
 from modules.metadata import MetadataExtractor
 from modules.metadata_plugin import MetadataPlugin
+from modules.pipeline import Pipeline
 
 
 class FakeExtractor:
@@ -53,6 +58,38 @@ class MetadataPluginTest(unittest.TestCase):
         }
 
         self.assertTrue(self.plugin.needs_processing(document, self.track))
+
+
+class PipelineTest(unittest.TestCase):
+    @patch("modules.pipeline.MetadataPlugin")
+    @patch("modules.pipeline.Registry.content_hash", return_value="track-1")
+    @patch("modules.pipeline.Scanner")
+    @patch("modules.pipeline.Config")
+    def test_continues_when_metadata_extraction_fails(
+        self, config_class, scanner_class, content_hash, plugin_class
+    ):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            output_directory = root / "output" / "tracks"
+            track = Track(str(root / "invalid.mp3"), "invalid.mp3", ".mp3")
+            Path(track.path).write_bytes(b"not an mp3")
+            config_class.return_value.data = {
+                "musicRoot": str(root),
+                "outputRoot": str(output_directory),
+                "supportedFormats": [".mp3"],
+            }
+            scanner_class.return_value.scan.return_value = [track]
+            plugin = Mock()
+            plugin.needs_processing.return_value = True
+            plugin.process.side_effect = ValueError("invalid audio")
+            plugin_class.return_value = plugin
+
+            Pipeline().run()
+
+            document = JsonManager(output_directory).load("track-1")
+            self.assertEqual(document["system"]["sourcePath"], track.path)
+            self.assertFalse(document["metadata"])
+            plugin.process.assert_called_once()
 
 
 if __name__ == "__main__":
