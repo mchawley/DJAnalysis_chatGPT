@@ -5,6 +5,9 @@ from modules.registry import Registry
 from modules.json_manager import JsonManager
 from modules.manifest import ManifestManager
 from modules.metadata_plugin import MetadataPlugin
+from modules.rekordbox.importer import RekordboxImporter
+from modules.rekordbox.matcher import RekordboxMatcher
+from modules.rekordbox.parser import RekordboxParser
 from datetime import datetime, timezone
 from pathlib import Path
 from tqdm import tqdm
@@ -17,12 +20,16 @@ class Pipeline:
         jm=JsonManager(cfg['outputRoot'])
         manifest_manager = ManifestManager(cfg['outputRoot'])
         metadata_plugin = MetadataPlugin()
+        rekordbox_matcher = self._load_rekordbox_matcher(cfg.get("rekordboxXmlPath"), log)
+        rekordbox_importer = RekordboxImporter()
         previous_tracks = manifest_manager.load()['tracks']
         tracks=scanner.scan()
         current_tracks = {}
         processed=0
         metadata_updated = 0
         metadata_failed = 0
+        rekordbox_imported = 0
+        rekordbox_unmatched = 0
         duplicates = 0
         states = {"new": 0, "modified": 0, "moved": 0, "unchanged": 0}
         replaced_track_ids = set()
@@ -71,6 +78,13 @@ class Pipeline:
                             f"[ERROR] Metadata failed for {t.path}: "
                             f"{type(error).__name__}: {error}"
                         )
+                if rekordbox_matcher:
+                    rekordbox_match = rekordbox_matcher.match(t, doc)
+                    if rekordbox_match.track:
+                        rekordbox_importer.import_track(doc, rekordbox_match.track)
+                        rekordbox_imported += 1
+                    else:
+                        rekordbox_unmatched += 1
                 jm.save(tid,doc)
                 current_tracks[tid] = entry
                 states[state] += 1
@@ -82,9 +96,28 @@ class Pipeline:
         log.info(f'Documents updated : {processed}')
         log.info(f'Metadata updated   : {metadata_updated}')
         log.info(f'Metadata failed    : {metadata_failed}')
+        if rekordbox_matcher:
+            log.info(f'Rekordbox imported: {rekordbox_imported}')
+            log.info(f'Rekordbox unmatched: {rekordbox_unmatched}')
         log.info(f'Duplicates         : {duplicates}')
         log.info(f'New               : {states["new"]}')
         log.info(f'Modified          : {states["modified"]}')
         log.info(f'Moved             : {states["moved"]}')
         log.info(f'Unchanged         : {states["unchanged"]}')
         log.info(f'Deleted           : {len(deleted)}')
+
+    @staticmethod
+    def _load_rekordbox_matcher(xml_path, log):
+        if not xml_path:
+            return None
+        try:
+            rekordbox_tracks = RekordboxParser().parse(xml_path)
+        except Exception as error:
+            log.error(
+                f"Could not read Rekordbox XML at {xml_path}: "
+                f"{type(error).__name__}: {error}"
+            )
+            return None
+
+        log.info(f"Loaded {len(rekordbox_tracks)} Rekordbox tracks")
+        return RekordboxMatcher(rekordbox_tracks)

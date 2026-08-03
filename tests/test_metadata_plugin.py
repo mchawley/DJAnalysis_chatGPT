@@ -8,6 +8,7 @@ from modules.json_manager import JsonManager
 from modules.metadata import MetadataExtractor
 from modules.metadata_plugin import MetadataPlugin
 from modules.pipeline import Pipeline
+from modules.rekordbox.models import RekordboxTrack
 
 
 class FakeExtractor:
@@ -120,6 +121,42 @@ class PipelineTest(unittest.TestCase):
             document = JsonManager(output_directory).load("track-1")
             self.assertEqual(document["system"]["sourcePath"], first.path)
             self.assertEqual(len(plugin.process.call_args_list), 0)
+
+    @patch("modules.pipeline.RekordboxParser")
+    @patch("modules.pipeline.MetadataPlugin")
+    @patch("modules.pipeline.Registry.content_hash", return_value="track-1")
+    @patch("modules.pipeline.Scanner")
+    @patch("modules.pipeline.Config")
+    def test_imports_matching_rekordbox_metadata(
+        self, config_class, scanner_class, content_hash, plugin_class, parser_class
+    ):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            output_directory = root / "output" / "tracks"
+            track = Track(str(root / "song.mp3"), "song.mp3", ".mp3")
+            Path(track.path).write_bytes(b"audio")
+            config_class.return_value.data = {
+                "musicRoot": str(root),
+                "outputRoot": str(output_directory),
+                "rekordboxXmlPath": str(root / "rekordbox.xml"),
+                "supportedFormats": [".mp3"],
+            }
+            scanner_class.return_value.scan.return_value = [track]
+            plugin_class.return_value.needs_processing.return_value = False
+            parser_class.return_value.parse.return_value = [
+                RekordboxTrack(
+                    track_id="42", location=track.path, title="Song", artist="DJ",
+                    album=None, genre=None, bpm=122.0, key="8A", rating=5,
+                    color="Blue", comments="Test", date_added=None, play_count=1,
+                    last_played=None,
+                )
+            ]
+
+            Pipeline().run()
+
+            document = JsonManager(output_directory).load("track-1")
+            self.assertEqual(document["library"]["provider"], "rekordbox")
+            self.assertEqual(document["library"]["trackId"], "42")
 
 
 if __name__ == "__main__":

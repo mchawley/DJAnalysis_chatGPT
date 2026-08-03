@@ -1,6 +1,7 @@
 {
   "musicRoot": "/Users/manishchawley/Music",
   "outputRoot": "./output/tracks",
+  "rekordboxXmlPath": null,
   "supportedFormats": [
     ".mp3",
     ".flac",
