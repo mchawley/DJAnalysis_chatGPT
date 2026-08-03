@@ -18,8 +18,8 @@ from pathlib import Path
 from tqdm import tqdm
 
 class Pipeline:
-    REKORDBOX_LIBRARY_VERSION = "2.0"
-    REKORDBOX_ANALYSIS_VERSION = "2.0"
+    REKORDBOX_LIBRARY_VERSION = "3.0"
+    REKORDBOX_ANALYSIS_VERSION = "3.0"
 
     def run(self):
         cfg=Config().data

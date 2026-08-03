@@ -161,7 +161,7 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(document["library"]["provider"], "rekordbox")
             self.assertEqual(document["library"]["trackId"], "42")
             self.assertTrue(
-                Pipeline._module_is_current(document, "rekordbox_library", "2.0")
+                Pipeline._module_is_current(document, "rekordbox_library", "3.0")
             )
             library_reader_class.return_value.read.assert_called_once()
             self.assertEqual(document_path.stat().st_mtime_ns, first_modified)
