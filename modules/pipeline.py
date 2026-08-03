@@ -23,6 +23,7 @@ class Pipeline:
         processed=0
         metadata_updated = 0
         metadata_failed = 0
+        duplicates = 0
         states = {"new": 0, "modified": 0, "moved": 0, "unchanged": 0}
         replaced_track_ids = set()
         previous_ids_by_path = {
@@ -34,6 +35,14 @@ class Pipeline:
             for t in progress:
                 progress.set_postfix_str(Path(t.path).name, refresh=False)
                 tid=Registry.content_hash(t.path)
+                if tid in current_tracks:
+                    duplicates += 1
+                    progress.write(
+                        f"[INFO] Duplicate skipped: {t.path} "
+                        f"(same content as {current_tracks[tid]['path']})"
+                    )
+                    continue
+
                 entry = manifest_manager.build_entry(tid, t.path, jm.get_json_path(tid))
                 state = manifest_manager.get_track_state(previous_tracks.get(tid), entry)
 
@@ -73,6 +82,7 @@ class Pipeline:
         log.info(f'Documents updated : {processed}')
         log.info(f'Metadata updated   : {metadata_updated}')
         log.info(f'Metadata failed    : {metadata_failed}')
+        log.info(f'Duplicates         : {duplicates}')
         log.info(f'New               : {states["new"]}')
         log.info(f'Modified          : {states["modified"]}')
         log.info(f'Moved             : {states["moved"]}')

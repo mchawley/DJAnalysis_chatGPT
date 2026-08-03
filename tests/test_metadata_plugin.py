@@ -91,6 +91,36 @@ class PipelineTest(unittest.TestCase):
             self.assertFalse(document["metadata"])
             plugin.process.assert_called_once()
 
+    @patch("modules.pipeline.MetadataPlugin")
+    @patch("modules.pipeline.Registry.content_hash", return_value="track-1")
+    @patch("modules.pipeline.Scanner")
+    @patch("modules.pipeline.Config")
+    def test_processes_only_one_document_for_duplicate_content(
+        self, config_class, scanner_class, content_hash, plugin_class
+    ):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            output_directory = root / "output" / "tracks"
+            first = Track(str(root / "first.mp3"), "first.mp3", ".mp3")
+            duplicate = Track(str(root / "duplicate.mp3"), "duplicate.mp3", ".mp3")
+            Path(first.path).write_bytes(b"same content")
+            Path(duplicate.path).write_bytes(b"same content")
+            config_class.return_value.data = {
+                "musicRoot": str(root),
+                "outputRoot": str(output_directory),
+                "supportedFormats": [".mp3"],
+            }
+            scanner_class.return_value.scan.return_value = [first, duplicate]
+            plugin = Mock()
+            plugin.needs_processing.return_value = False
+            plugin_class.return_value = plugin
+
+            Pipeline().run()
+
+            document = JsonManager(output_directory).load("track-1")
+            self.assertEqual(document["system"]["sourcePath"], first.path)
+            self.assertEqual(len(plugin.process.call_args_list), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
