@@ -176,7 +176,7 @@ class RekordboxDatabaseAnalysisReaderTest(unittest.TestCase):
             parser = RekordboxAnlzParser(FakeAnlzFile)
             self.assertEqual(parser.parse_directory(directory), {})
 
-        self.assertEqual(parser.errors[0][0], anlz_path)
+        self.assertEqual(parser.errors, [])
 
 
 if __name__ == "__main__":

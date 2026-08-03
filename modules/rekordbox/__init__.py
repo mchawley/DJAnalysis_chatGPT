@@ -5,6 +5,7 @@ from .analysis_importer import RekordboxAnalysisImporter
 from .anlz import RekordboxAnalysis, RekordboxAnlzParser
 from .database import RekordboxDatabaseAnalysisReader
 from .pssi import PssiParser
+from .raw_anlz import RawAnlzParser
 from .matcher import MatchResult, RekordboxMatcher
 from .models import CuePoint, HotCue, MemoryCue, Playlist, RekordboxTrack
 from .parser import RekordboxParser

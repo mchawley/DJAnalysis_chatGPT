@@ -74,7 +74,7 @@ class RekordboxAnlzParser:
     def _tag(anlz, name):
         try:
             return anlz.get(name)
-        except (KeyError, AttributeError):
+        except (KeyError, AttributeError, IndexError, TypeError, ValueError):
             return None
 
     @staticmethod

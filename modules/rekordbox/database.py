@@ -3,6 +3,7 @@ from pathlib import Path
 from .anlz import RekordboxAnlzParser
 from .models import HotCue, MemoryCue, RekordboxTrack
 from .pssi import PssiParser
+from .raw_anlz import RawAnlzParser
 
 
 class RekordboxDatabaseAnalysisReader:
@@ -26,7 +27,9 @@ class RekordboxDatabaseAnalysisReader:
                 continue
             try:
                 analysis_files = database.read_anlz_files(content)
-            except AttributeError:
+            except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+                # pyrekordbox 0.4.x cannot decode several Rekordbox 7 tags.
+                # Try every linked file independently; unsupported files are skipped.
                 analysis_files = self._read_analysis_files(database, content)
             except Exception as error:
                 self.errors.append((location, "ANLZ", error))
@@ -40,19 +43,28 @@ class RekordboxDatabaseAnalysisReader:
                         anlz, location, source_path, analyses.get(location)
                     )
                 except Exception as error:
-                    self.errors.append((location, analysis_type, error))
+                    if not self._is_unsupported_anlz_error(error):
+                        self.errors.append((location, analysis_type, error))
             try:
-                ext_path = database.get_anlz_paths(content).get("EXT")
+                paths = database.get_anlz_paths(content)
+                dat_path = paths.get("DAT")
+                ext_path = paths.get("EXT")
+                beat_grid = RawAnlzParser().parse_beat_grid(dat_path) if dat_path else None
                 pssi = PssiParser().parse_file(ext_path) if ext_path else None
-                if pssi:
+                if beat_grid or pssi:
                     analysis = analyses.setdefault(location, parser.extract(
-                        None, location, ext_path
+                        None, location, dat_path or ext_path
                     ))
-                    analysis.phrases = pssi["phrases"]
-                    analysis.structure = {
-                        "endBeat": pssi["endBeat"],
-                        "entrySize": pssi["entrySize"],
-                    }
+                    if beat_grid:
+                        analysis.beat_numbers = beat_grid["beatNumbers"]
+                        analysis.bpms = beat_grid["bpms"]
+                        analysis.beat_positions = beat_grid["beatPositions"]
+                    if pssi:
+                        analysis.phrases = pssi["phrases"]
+                        analysis.structure = {
+                            "endBeat": pssi["endBeat"],
+                            "entrySize": pssi["entrySize"],
+                        }
             except Exception as error:
                 self.errors.append((location, "PSSI", error))
         return analyses
@@ -80,9 +92,15 @@ class RekordboxDatabaseAnalysisReader:
         for analysis_type in ("DAT", "EXT", "2EX", "EX2"):
             try:
                 files[analysis_type] = database.read_anlz_file(content, analysis_type)
-            except (KeyError, ValueError):
+            except Exception:
+                # Rekordbox 7 analysis may contain tags unsupported by the
+                # installed pyrekordbox version. Raw PSSI parsing still runs.
                 continue
         return files
+
+    @staticmethod
+    def _is_unsupported_anlz_error(error):
+        return isinstance(error, (IndexError, KeyError, TypeError, ValueError))
 
     @staticmethod
     def _analysis_path(database, content, analysis_type):
