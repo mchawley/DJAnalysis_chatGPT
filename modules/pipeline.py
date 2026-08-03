@@ -6,6 +6,7 @@ from modules.json_manager import JsonManager
 from modules.manifest import ManifestManager
 from modules.metadata_plugin import MetadataPlugin
 from datetime import datetime
+from tqdm import tqdm
 
 class Pipeline:
     def run(self):
@@ -27,7 +28,7 @@ class Pipeline:
             for track_id, entry in previous_tracks.items()
         }
         log.info(f'Found {len(tracks)} tracks')
-        for t in tracks:
+        for t in tqdm(tracks, desc="Processing tracks", unit="track"):
             tid=Registry.content_hash(t.path)
             entry = manifest_manager.build_entry(tid, t.path, jm.get_json_path(tid))
             state = manifest_manager.get_track_state(previous_tracks.get(tid), entry)
