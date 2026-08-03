@@ -2,6 +2,7 @@ import unittest
 
 from models.track import Track
 from modules.energy_plugin import EnergyPlugin
+from modules.energy import EnergyExtractor
 
 
 class EnergyPluginTest(unittest.TestCase):
@@ -31,3 +32,10 @@ class EnergyPluginTest(unittest.TestCase):
         track = Track("/music/track.mp3", "track.mp3", ".mp3")
 
         self.assertFalse(plugin.needs_processing({"analysis": {}}, track))
+
+    def test_uses_absolute_phrase_beats_to_find_positions(self):
+        positions = [0.0, 0.5, 1.0, 1.5, 2.0]
+
+        self.assertEqual(EnergyExtractor._beat_time(positions, 1), 0.0)
+        self.assertEqual(EnergyExtractor._beat_time(positions, 5), 2.0)
+        self.assertIsNone(EnergyExtractor._beat_time(positions, 6))

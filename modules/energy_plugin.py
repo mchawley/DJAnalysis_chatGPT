@@ -8,7 +8,7 @@ class EnergyPlugin(Plugin):
     """Generate phrase-level audio features from Rekordbox phrase boundaries."""
 
     NAME = "energy"
-    VERSION = "1.0"
+    VERSION = "1.1"
 
     def __init__(self, extractor=None):
         self.extractor = extractor or EnergyExtractor()

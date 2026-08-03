@@ -14,11 +14,11 @@ class EnergyExtractor:
     def extract(self, path, analysis):
         phrases = analysis.get("phrases", [])
         if not phrases:
-            return {"provider": "cratiq", "version": "1.0", "phrases": []}
+            return {"provider": "cratiq", "version": "1.1", "phrases": []}
 
         audio, sample_rate = self._load_audio(path)
         meter = self._loudness_meter(sample_rate)
-        beat_times = dict(zip(analysis.get("beatNumbers", []), analysis.get("beatPositions", [])))
+        beat_positions = analysis.get("beatPositions", [])
         end_beat = analysis.get("structure", {}).get("endBeat")
         result = []
 
@@ -26,8 +26,8 @@ class EnergyExtractor:
             start_beat = phrase.get("startBeat")
             next_phrase = phrases[index + 1] if index + 1 < len(phrases) else None
             end = next_phrase.get("startBeat") if next_phrase else end_beat
-            start_seconds = beat_times.get(start_beat)
-            end_seconds = beat_times.get(end)
+            start_seconds = self._beat_time(beat_positions, start_beat)
+            end_seconds = self._beat_time(beat_positions, end)
             if start_seconds is None or end_seconds is None or end_seconds <= start_seconds:
                 continue
             segment = audio[
@@ -46,7 +46,14 @@ class EnergyExtractor:
                 **self._features(segment, sample_rate, meter),
             })
 
-        return {"provider": "cratiq", "version": "1.0", "phrases": result}
+        return {"provider": "cratiq", "version": "1.1", "phrases": result}
+
+    @staticmethod
+    def _beat_time(beat_positions, absolute_beat):
+        """PQTZ beat values are bar-relative; array position is the absolute beat."""
+        if not isinstance(absolute_beat, int) or not 1 <= absolute_beat <= len(beat_positions):
+            return None
+        return beat_positions[absolute_beat - 1]
 
     def _load_audio(self, path):
         if self.audio_loader:
