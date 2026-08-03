@@ -4,6 +4,7 @@
   "rekordboxXmlPath": null,
   "rekordboxDatabaseLibrary": true,
   "rekordboxDatabaseAnalysis": true,
+  "energyEngine": true,
   "supportedFormats": [
     ".mp3",
     ".flac",

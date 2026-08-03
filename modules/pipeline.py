@@ -5,6 +5,7 @@ from modules.registry import Registry
 from modules.json_manager import JsonManager
 from modules.manifest import ManifestManager
 from modules.metadata_plugin import MetadataPlugin
+from modules.energy_plugin import EnergyPlugin
 from modules.rekordbox.importer import RekordboxImporter
 from modules.rekordbox.matcher import RekordboxMatcher
 from modules.rekordbox.parser import RekordboxParser
@@ -28,17 +29,20 @@ class Pipeline:
         jm=JsonManager(cfg['outputRoot'])
         manifest_manager = ManifestManager(cfg['outputRoot'])
         metadata_plugin = MetadataPlugin()
+        energy_plugin = EnergyPlugin()
         rekordbox_library_enabled = cfg.get("rekordboxDatabaseLibrary", False)
         rekordbox_matcher = None
         rekordbox_xml_loaded = False
         rekordbox_importer = RekordboxImporter()
         rekordbox_analysis_enabled = cfg.get("rekordboxDatabaseAnalysis", False)
+        energy_enabled = cfg.get("energyEngine", False)
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
         log.info("Scanning music library...")
         tracks=scanner.scan()
         current_tracks = {}
         track_ids_by_path = {}
+        tracks_by_path = {}
         documents_updated = 0
         metadata_updated = 0
         metadata_failed = 0
@@ -47,6 +51,9 @@ class Pipeline:
         rekordbox_skipped = 0
         analysis_imported = 0
         analysis_skipped = 0
+        energy_updated = 0
+        energy_skipped = 0
+        energy_failed = 0
         duplicates = 0
         states = {"new": 0, "modified": 0, "moved": 0, "unchanged": 0}
         replaced_track_ids = set()
@@ -131,6 +138,7 @@ class Pipeline:
                     documents_updated += 1
                 current_tracks[tid] = entry
                 track_ids_by_path[self._normalise_path(t.path)] = tid
+                tracks_by_path[self._normalise_path(t.path)] = t
                 states[state] += 1
 
         if rekordbox_analysis_enabled:
@@ -140,6 +148,15 @@ class Pipeline:
             analysis_imported += imported
             analysis_skipped += skipped
             documents_updated += imported
+
+        if energy_enabled:
+            updated, skipped, failed = self._process_energy(
+                tracks_by_path, track_ids_by_path, jm, energy_plugin
+            )
+            energy_updated += updated
+            energy_skipped += skipped
+            energy_failed += failed
+            documents_updated += updated
 
         deleted = set(previous_tracks) - set(current_tracks) - replaced_track_ids
         if current_tracks != previous_tracks:
@@ -155,6 +172,10 @@ class Pipeline:
         if rekordbox_analysis_enabled:
             log.info(f'Rekordbox analysis: {analysis_imported}')
             log.info(f'Analysis skipped   : {analysis_skipped}')
+        if energy_enabled:
+            log.info(f'Energy updated     : {energy_updated}')
+            log.info(f'Energy skipped     : {energy_skipped}')
+            log.info(f'Energy failed      : {energy_failed}')
         log.info(f'Duplicates         : {duplicates}')
         log.info(f'New               : {states["new"]}')
         log.info(f'Modified          : {states["modified"]}')
@@ -233,6 +254,31 @@ class Pipeline:
             )
         log.info(f"Rekordbox analysis streamed: {imported + skipped}")
         return imported, skipped
+
+    @staticmethod
+    def _process_energy(tracks_by_path, track_ids_by_path, json_manager, plugin):
+        """Run phrase-level audio analysis after Rekordbox phrases are available."""
+        updated = 0
+        skipped = 0
+        failed = 0
+        with tqdm(tracks_by_path.items(), desc="Calculating phrase energy", unit="track") as progress:
+            for path, track in progress:
+                progress.set_postfix_str(Path(track.path).name, refresh=False)
+                document = json_manager.load(track_ids_by_path[path])
+                if not plugin.needs_processing(document, track):
+                    skipped += 1
+                    continue
+                try:
+                    plugin.process(document, track)
+                    json_manager.save(track_ids_by_path[path], document)
+                    updated += 1
+                except Exception as error:
+                    failed += 1
+                    progress.write(
+                        f"[ERROR] Energy analysis failed for {track.path}: "
+                        f"{type(error).__name__}: {error}"
+                    )
+        return updated, skipped, failed
 
     @staticmethod
     def _normalise_path(path):
