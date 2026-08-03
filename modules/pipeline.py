@@ -34,7 +34,7 @@ class Pipeline:
         previous_tracks = manifest_manager.load()['tracks']
         tracks=scanner.scan()
         current_tracks = {}
-        processed=0
+        documents_updated = 0
         metadata_updated = 0
         metadata_failed = 0
         rekordbox_imported = 0
@@ -71,19 +71,30 @@ class Pipeline:
                         state = "modified"
                         replaced_track_ids.add(previous_id)
 
+                json_path = jm.get_json_path(tid)
+                document_exists = json_path.exists()
                 doc = jm.load(tid)
+                document_changed = not document_exists
                 system = doc.setdefault("system", {})
-                system.setdefault("trackId", tid)
-                system.setdefault(
-                    "createdAt",
-                    datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                )
-                system["sourcePath"] = t.path
-                system.setdefault("schemaVersion", "0.1")
+                if "trackId" not in system:
+                    system["trackId"] = tid
+                    document_changed = True
+                if "createdAt" not in system:
+                    system["createdAt"] = datetime.now(timezone.utc).isoformat().replace(
+                        "+00:00", "Z"
+                    )
+                    document_changed = True
+                if system.get("sourcePath") != t.path:
+                    system["sourcePath"] = t.path
+                    document_changed = True
+                if "schemaVersion" not in system:
+                    system["schemaVersion"] = "0.1"
+                    document_changed = True
                 if metadata_plugin.needs_processing(doc, t):
                     try:
                         metadata_plugin.process(doc, t)
                         metadata_updated += 1
+                        document_changed = True
                     except Exception as error:
                         metadata_failed += 1
                         progress.write(
@@ -104,6 +115,7 @@ class Pipeline:
                                 doc, "rekordbox_library", self.REKORDBOX_LIBRARY_VERSION
                             )
                             rekordbox_imported += 1
+                            document_changed = True
                         else:
                             rekordbox_unmatched += 1
                 elif rekordbox_xml_path:
@@ -117,17 +129,20 @@ class Pipeline:
                         doc, "rekordbox_analysis", self.REKORDBOX_ANALYSIS_VERSION
                     )
                     analysis_imported += 1
+                    document_changed = True
                 elif analysis:
                     analysis_skipped += 1
-                jm.save(tid,doc)
+                if document_changed:
+                    jm.save(tid,doc)
+                    documents_updated += 1
                 current_tracks[tid] = entry
                 states[state] += 1
-                processed+=1
 
         deleted = set(previous_tracks) - set(current_tracks) - replaced_track_ids
-        manifest_manager.save(current_tracks)
+        if current_tracks != previous_tracks:
+            manifest_manager.save(current_tracks)
 
-        log.info(f'Documents updated : {processed}')
+        log.info(f'Documents updated : {documents_updated}')
         log.info(f'Metadata updated   : {metadata_updated}')
         log.info(f'Metadata failed    : {metadata_failed}')
         if rekordbox_xml_path:

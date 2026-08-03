@@ -153,6 +153,8 @@ class PipelineTest(unittest.TestCase):
             ]
 
             Pipeline().run()
+            document_path = JsonManager(output_directory).get_json_path("track-1")
+            first_modified = document_path.stat().st_mtime_ns
             Pipeline().run()
 
             document = JsonManager(output_directory).load("track-1")
@@ -162,6 +164,7 @@ class PipelineTest(unittest.TestCase):
                 Pipeline._module_is_current(document, "rekordbox_library", "1.0")
             )
             parser_class.return_value.parse.assert_called_once()
+            self.assertEqual(document_path.stat().st_mtime_ns, first_modified)
 
 
 if __name__ == "__main__":
