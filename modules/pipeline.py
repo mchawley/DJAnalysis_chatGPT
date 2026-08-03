@@ -13,29 +13,15 @@ class Pipeline:
         jm=JsonManager(cfg['outputRoot'])
         tracks=scanner.scan()
         processed=0
-        skipped=0
         log.info(f'Found {len(tracks)} tracks')
         for t in tracks:
             tid=Registry.content_hash(t.path)
-            if jm.exists(tid):
-                skipped+=1
-                continue
-            doc={
-                "metadata":{},
-                "rekordbox":{},
-                "audio":{},
-                "structure":{},
-                "features":{},
-                "energy":{},
-                "dj":{},
-                "system":{
-                    "trackId":tid,
-                    "sourcePath":t.path,
-                    "createdAt":datetime.utcnow().isoformat()+"Z",
-                    "schemaVersion":"0.1"
-                }
-            }
+            doc = jm.load(tid)
+            system = doc.setdefault("system", {})
+            system.setdefault("trackId", tid)
+            system.setdefault("createdAt", datetime.utcnow().isoformat() + "Z")
+            system["sourcePath"] = t.path
+            system.setdefault("schemaVersion", "0.1")
             jm.save(tid,doc)
             processed+=1
-        log.info(f'New JSONs : {processed}')
-        log.info(f'Skipped   : {skipped}')
+        log.info(f'Documents updated : {processed}')
