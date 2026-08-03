@@ -122,13 +122,13 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(document["system"]["sourcePath"], first.path)
             self.assertEqual(len(plugin.process.call_args_list), 0)
 
-    @patch("modules.pipeline.RekordboxParser")
+    @patch("modules.pipeline.RekordboxDatabaseLibraryReader")
     @patch("modules.pipeline.MetadataPlugin")
     @patch("modules.pipeline.Registry.content_hash", return_value="track-1")
     @patch("modules.pipeline.Scanner")
     @patch("modules.pipeline.Config")
     def test_imports_matching_rekordbox_metadata(
-        self, config_class, scanner_class, content_hash, plugin_class, parser_class
+        self, config_class, scanner_class, content_hash, plugin_class, library_reader_class
     ):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -138,12 +138,12 @@ class PipelineTest(unittest.TestCase):
             config_class.return_value.data = {
                 "musicRoot": str(root),
                 "outputRoot": str(output_directory),
-                "rekordboxXmlPath": str(root / "rekordbox.xml"),
+                "rekordboxDatabaseLibrary": True,
                 "supportedFormats": [".mp3"],
             }
             scanner_class.return_value.scan.return_value = [track]
             plugin_class.return_value.needs_processing.return_value = False
-            parser_class.return_value.parse.return_value = [
+            library_reader_class.return_value.read.return_value = [
                 RekordboxTrack(
                     track_id="42", location=track.path, title="Song", artist="DJ",
                     album=None, genre=None, bpm=122.0, key="8A", rating=5,
@@ -161,9 +161,9 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(document["library"]["provider"], "rekordbox")
             self.assertEqual(document["library"]["trackId"], "42")
             self.assertTrue(
-                Pipeline._module_is_current(document, "rekordbox_library", "1.0")
+                Pipeline._module_is_current(document, "rekordbox_library", "2.0")
             )
-            parser_class.return_value.parse.assert_called_once()
+            library_reader_class.return_value.read.assert_called_once()
             self.assertEqual(document_path.stat().st_mtime_ns, first_modified)
 
 

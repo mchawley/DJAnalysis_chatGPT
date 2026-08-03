@@ -1,7 +1,8 @@
 {
   "musicRoot": "/Users/manishchawley/Music",
   "outputRoot": "./output/tracks",
-  "rekordboxXmlPath": "./export.xml",
+  "rekordboxXmlPath": null,
+  "rekordboxDatabaseLibrary": true,
   "rekordboxDatabaseAnalysis": true,
   "supportedFormats": [
     ".mp3",
