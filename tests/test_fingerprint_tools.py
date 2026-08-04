@@ -13,6 +13,7 @@ class FingerprintToolsTest(unittest.TestCase):
         engine = FingerprintSimilarityEngine()
         target = {"track_id": "a", "segment_index": 0, "fingerprint": fingerprint()}
         candidates = [{"track_id": "b", "segment_index": 0, "fingerprint": fingerprint(0.5)}, {"track_id": "c", "segment_index": 0, "fingerprint": fingerprint(0.1)}]
+        engine.fit([target] + candidates)
         self.assertEqual(engine.nearest_neighbors(target, candidates)[0].track_id, "b")
 
     def test_flags_missing_core_features(self):

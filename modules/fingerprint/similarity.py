@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from math import sqrt
+from .normalization import FingerprintNormalizer
 
 
 @dataclass
@@ -20,8 +21,13 @@ class FingerprintSimilarityEngine:
         "spectrum.spectral_centroid": 0.7, "spectrum.spectral_flatness": 0.5,
     }
 
-    def __init__(self, weights=None):
+    def __init__(self, weights=None, normalizer=None):
         self.weights = weights or self.DEFAULT_WEIGHTS
+        self.normalizer = normalizer or FingerprintNormalizer()
+
+    def fit(self, candidates):
+        self.normalizer.fit([candidate["fingerprint"] for candidate in candidates], self.weights)
+        return self
 
     def nearest_neighbors(self, target, candidates, limit=10):
         """Return the closest segments, excluding the target itself."""
@@ -39,9 +45,10 @@ class FingerprintSimilarityEngine:
     def score(self, left, right):
         values = []
         for path, weight in self.weights.items():
-            a, b = self._value(left, path), self._value(right, path)
-            if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-                values.append((float(a), float(b), weight))
+            a, b = self.normalizer.scalar(left, path), self.normalizer.scalar(right, path)
+            if a is not None and b is not None: values.append((a, b, weight))
+        temporal_left, temporal_right = self.normalizer.temporal(left), self.normalizer.temporal(right)
+        values.extend((a, b, 0.35) for a, b in zip(temporal_left, temporal_right))
         if not values:
             return None
         dot = sum(a * b * weight for a, b, weight in values)
