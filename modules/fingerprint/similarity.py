@@ -20,6 +20,7 @@ class FingerprintSimilarityEngine:
         "bass.overall": 0.8, "bass.kick": 0.7, "rhythm.density": 0.7,
         "rhythm.groove": 0.5, "rhythm.syncopation": 0.5,
         "spectrum.spectral_centroid": 0.7, "spectrum.spectral_flatness": 0.5,
+        "harmonic.key": 0.8,
     }
 
     def __init__(self, weights=None, normalizer=None):
@@ -46,6 +47,10 @@ class FingerprintSimilarityEngine:
     def score(self, left, right):
         values = []
         for path, weight in self.weights.items():
+            if path == "harmonic.key":
+                compatibility = self._harmonic_score(left, right)
+                if compatibility is not None: values.append((1.0, compatibility, weight))
+                continue
             a, b = self.normalizer.scalar(left, path), self.normalizer.scalar(right, path)
             if a is not None and b is not None: values.append((a, b, weight))
         temporal_left, temporal_right = self.normalizer.temporal(left), self.normalizer.temporal(right)
@@ -64,7 +69,24 @@ class FingerprintSimilarityEngine:
             a, b = self.normalizer.scalar(left, path), self.normalizer.scalar(right, path)
             if a is not None and b is not None:
                 matches.append((abs(a - b), labels[path]))
-        return [label for _distance, label in sorted(matches)[:limit]]
+        reasons = [label for _distance, label in sorted(matches)[:limit]]
+        if self._harmonic_score(left, right) and len(reasons) < limit:
+            reasons.append("compatible key")
+        return reasons
+
+    @staticmethod
+    def _harmonic_score(left, right):
+        left_key = left.get("harmonic", {}).get("camelot") or left.get("harmonic", {}).get("key")
+        right_key = right.get("harmonic", {}).get("camelot") or right.get("harmonic", {}).get("key")
+        if not left_key or not right_key: return None
+        if left_key == right_key: return 1.0
+        try:
+            left_number, left_mode = int(str(left_key)[:-1]), str(left_key)[-1].upper()
+            right_number, right_mode = int(str(right_key)[:-1]), str(right_key)[-1].upper()
+        except ValueError: return 0.0
+        if left_number == right_number and left_mode != right_mode: return 0.8
+        if left_mode == right_mode and (left_number - right_number) % 12 in (1, 11): return 0.7
+        return 0.0
 
     @staticmethod
     def _value(fingerprint, path):
