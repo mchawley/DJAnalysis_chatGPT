@@ -17,6 +17,7 @@ from modules.rekordbox.database import (
 )
 from datetime import datetime, timezone
 from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 from tqdm import tqdm
 
 class Pipeline:
@@ -172,7 +173,7 @@ class Pipeline:
             documents_updated += updated
 
         if fingerprint_enabled:
-            fingerprint_updated, fingerprint_skipped, fingerprint_failed = self._process_fingerprints(tracks_by_path, track_ids_by_path, jm, fingerprint_plugin)
+            fingerprint_updated, fingerprint_skipped, fingerprint_failed = self._process_fingerprints(tracks_by_path, track_ids_by_path, jm, fingerprint_plugin, cfg.get("analysisWorkers", 1))
             documents_updated += fingerprint_updated
 
         deleted = set(previous_tracks) - set(current_tracks) - replaced_track_ids
@@ -302,16 +303,44 @@ class Pipeline:
         return updated, skipped, failed
 
     @staticmethod
-    def _process_fingerprints(tracks_by_path, track_ids_by_path, json_manager, plugin):
+    def _process_fingerprints(tracks_by_path, track_ids_by_path, json_manager, plugin, workers):
+        from modules.fingerprint.plugin import build_fingerprints
         updated = skipped = failed = 0
-        with tqdm(tracks_by_path.items(), desc="Building fingerprints", unit="track") as progress:
-            for path, track in progress:
+        if workers <= 1:
+            with tqdm(tracks_by_path.items(), desc="Building fingerprints", unit="track") as progress:
+                for path, track in progress:
+                    document = json_manager.load(track_ids_by_path[path])
+                    if not plugin.needs_processing(document):
+                        skipped += 1
+                        continue
+                    try:
+                        document["analysis"]["fingerprints"] = build_fingerprints(track.path, document["analysis"], document.get("library", {}))
+                        plugin.mark_complete(document); json_manager.save(track_ids_by_path[path], document); updated += 1
+                    except Exception as error:
+                        failed += 1; progress.write(f"[ERROR] Fingerprint failed for {track.path}: {type(error).__name__}: {error}")
+            return updated, skipped, failed
+        pending = {}
+        items = iter(tracks_by_path.items())
+        with tqdm(total=len(tracks_by_path), desc="Building fingerprints", unit="track") as progress, ProcessPoolExecutor(max_workers=max(1, workers)) as executor:
+            def submit_next():
+                nonlocal skipped
+                try: path, track = next(items)
+                except StopIteration: return False
                 document = json_manager.load(track_ids_by_path[path])
-                if not plugin.needs_processing(document): skipped += 1; continue
-                try:
-                    plugin.process(document, track.path); json_manager.save(track_ids_by_path[path], document); updated += 1
-                except Exception as error:
-                    failed += 1; progress.write(f"[ERROR] Fingerprint failed for {track.path}: {type(error).__name__}: {error}")
+                if not plugin.needs_processing(document): skipped += 1; progress.update(1); return True
+                future = executor.submit(build_fingerprints, track.path, document["analysis"], document.get("library", {}))
+                pending[future] = (track, document, track_ids_by_path[path]); return True
+            while len(pending) < max(1, workers) * 2 and submit_next(): pass
+            while pending:
+                done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    track, document, track_id = pending.pop(future)
+                    try:
+                        document["analysis"]["fingerprints"] = future.result(); plugin.mark_complete(document); json_manager.save(track_id, document); updated += 1
+                    except Exception as error:
+                        failed += 1; progress.write(f"[ERROR] Fingerprint failed for {track.path}: {type(error).__name__}: {error}")
+                    progress.update(1)
+                while len(pending) < max(1, workers) * 2 and submit_next(): pass
         return updated, skipped, failed
 
     @staticmethod

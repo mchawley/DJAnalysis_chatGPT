@@ -2,6 +2,7 @@
   "musicRoot": "/Users/manishchawley/Music",
   "outputRoot": "./output/tracks",
   "rekordboxXmlPath": null,
+  "analysisWorkers": 2,
   "modules": {
     "metadata": false,
     "rekordbox_library": false,
