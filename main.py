@@ -1,5 +1,5 @@
-from modules.pipeline import Pipeline
+from analyze import main
 
 
 if __name__ == "__main__":
-    Pipeline().run()
+    main()
