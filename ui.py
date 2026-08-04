@@ -10,12 +10,13 @@ from modules.fingerprint import FingerprintSimilarityEngine, FingerprintValidato
 
 
 HTML = """<!doctype html><html><head><meta charset=utf-8><title>CrateIQ Insights</title>
-<style>body{font:16px system-ui;margin:2rem;max-width:1000px}select,button{padding:.5rem;margin:.25rem}table{border-collapse:collapse;width:100%}td,th{padding:.6rem;border-bottom:1px solid #ddd;text-align:left}.score{font-weight:700}</style></head>
-<body><h1>CrateIQ Insights</h1><p id=summary>Loading…</p><h2>Find similar segments</h2><select id=track></select><select id=segment></select><button onclick=search()>Find matches</button><table><thead><tr><th>Score</th><th>Track</th><th>Segment</th><th>Type</th><th>Why similar</th></tr></thead><tbody id=matches></tbody></table>
+<style>body{font:16px system-ui;margin:2rem;max-width:1000px}select,button{padding:.5rem;margin:.25rem}table{border-collapse:collapse;width:100%}td,th{padding:.6rem;border-bottom:1px solid #ddd;text-align:left}.score{font-weight:700}.card{background:#f5f5f7;padding:1rem;border-radius:.6rem;margin:1rem 0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}.label{color:#666;font-size:.8rem}</style></head>
+<body><h1>CrateIQ Insights</h1><p id=summary>Loading…</p><h2>Track Inspector</h2><select id=track></select><select id=segment onchange=inspect()></select><div id=inspector class=card>Select a track and segment.</div><h2>Find similar segments</h2><button onclick=search()>Find matches</button><table><thead><tr><th>Score</th><th>Track</th><th>Segment</th><th>Type</th><th>Why similar</th></tr></thead><tbody id=matches></tbody></table>
 <script>
 let tracks=[];fetch('/api/tracks').then(r=>r.json()).then(x=>{tracks=x;let s=track; x.forEach(t=>s.add(new Option(t.title,t.id)));loadSegments();});
 fetch('/api/summary').then(r=>r.json()).then(x=>summary.textContent=`${x.tracks} tracks · load a track to inspect its segments`);
-track.onchange=loadSegments;function loadSegments(){fetch(`/api/segments?track_id=${track.value}`).then(r=>r.json()).then(x=>{segment.innerHTML='';x.forEach(s=>segment.add(new Option(`#${s.index} · ${s.type}`,s.index)))})}
+track.onchange=loadSegments;function loadSegments(){fetch(`/api/segments?track_id=${track.value}`).then(r=>r.json()).then(x=>{segment.innerHTML='';x.forEach(s=>segment.add(new Option(`#${s.index} · ${s.type}`,s.index)));inspect()})}
+function inspect(){fetch(`/api/track?track_id=${track.value}&segment_index=${segment.value}`).then(r=>r.json()).then(x=>{let f=x.fingerprint||{}; inspector.innerHTML=`<b>${x.title||''}</b> · ${x.artist||''}<div class=grid><div><span class=label>BPM</span><br>${x.bpm??'—'}</div><div><span class=label>Key</span><br>${x.key??'—'}</div><div><span class=label>Segment</span><br>${f.segment??'—'} · ${f.duration?.toFixed(1)??'—'}s</div><div><span class=label>Energy</span><br>${f.energy?.overall?.toFixed(3)??'—'}</div><div><span class=label>Bass</span><br>${f.bass?.overall?.toFixed(3)??'—'}</div><div><span class=label>Brightness</span><br>${f.spectrum?.spectral_centroid?.toFixed(0)??'—'} Hz</div></div>`})}
 function search(){fetch(`/api/similar?track_id=${track.value}&segment_index=${segment.value}`).then(r=>r.json()).then(x=>matches.innerHTML=x.map(m=>`<tr><td class=score>${m.score.toFixed(3)}</td><td>${m.title}</td><td>#${m.segment_index}</td><td>${m.segment}</td><td>${m.reasons.join(', ')}</td></tr>`).join(''))}
 </script></body></html>"""
 
@@ -37,6 +38,12 @@ class InsightsHandler(BaseHTTPRequestHandler):
             if not path.exists(): return self._json([])
             doc = json.loads(path.read_text())
             return self._json([{"index": i, "type": value.get("segment", "CUSTOM")} for i, value in enumerate(doc.get("analysis", {}).get("fingerprints", []))])
+        if request.path == "/api/track":
+            query = parse_qs(request.query); track_id = query.get("track_id", [""])[0]; index = int(query.get("segment_index", ["0"])[0])
+            path = self.output_root / f"{track_id}.json"
+            if not path.exists(): return self._json({})
+            doc = json.loads(path.read_text()); fingerprints = doc.get("analysis", {}).get("fingerprints", [])
+            return self._json({"title": doc.get("metadata", {}).get("title"), "artist": doc.get("metadata", {}).get("artist"), "bpm": doc.get("library", {}).get("bpm"), "key": doc.get("library", {}).get("key"), "fingerprint": fingerprints[index] if 0 <= index < len(fingerprints) else {}})
         if request.path == "/api/similar":
             items, documents = self._items()
             query = parse_qs(request.query); track_id = query.get("track_id", [""])[0]; index = int(query.get("segment_index", ["0"])[0])
