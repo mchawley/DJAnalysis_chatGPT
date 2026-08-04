@@ -9,6 +9,7 @@ class SimilarityMatch:
     segment_index: int
     score: float
     fingerprint: dict
+    reasons: list[str]
 
 
 class FingerprintSimilarityEngine:
@@ -39,7 +40,7 @@ class FingerprintSimilarityEngine:
                 continue
             score = self.score(target["fingerprint"], candidate["fingerprint"])
             if score is not None:
-                matches.append(SimilarityMatch(candidate["track_id"], candidate["segment_index"], score, candidate["fingerprint"]))
+                matches.append(SimilarityMatch(candidate["track_id"], candidate["segment_index"], score, candidate["fingerprint"], self.explain(target["fingerprint"], candidate["fingerprint"])))
         return sorted(matches, key=lambda match: match.score, reverse=True)[:limit]
 
     def score(self, left, right):
@@ -55,6 +56,15 @@ class FingerprintSimilarityEngine:
         left_norm = sqrt(sum(a * a * weight for a, _b, weight in values))
         right_norm = sqrt(sum(b * b * weight for _a, b, weight in values))
         return dot / (left_norm * right_norm) if left_norm and right_norm else 0.0
+
+    def explain(self, left, right, limit=3):
+        labels = {"tempo.bpm": "similar tempo", "energy.overall": "similar energy", "energy.slope": "similar energy movement", "bass.overall": "similar bass level", "bass.kick": "similar kick intensity", "rhythm.density": "similar rhythmic density", "rhythm.groove": "similar groove", "rhythm.syncopation": "similar syncopation", "spectrum.spectral_centroid": "similar brightness", "spectrum.spectral_flatness": "similar texture"}
+        matches = []
+        for path in self.weights:
+            a, b = self.normalizer.scalar(left, path), self.normalizer.scalar(right, path)
+            if a is not None and b is not None:
+                matches.append((abs(a - b), labels[path]))
+        return [label for _distance, label in sorted(matches)[:limit]]
 
     @staticmethod
     def _value(fingerprint, path):

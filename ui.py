@@ -11,12 +11,12 @@ from modules.fingerprint import FingerprintSimilarityEngine, FingerprintValidato
 
 HTML = """<!doctype html><html><head><meta charset=utf-8><title>CrateIQ Insights</title>
 <style>body{font:16px system-ui;margin:2rem;max-width:1000px}select,button{padding:.5rem;margin:.25rem}table{border-collapse:collapse;width:100%}td,th{padding:.6rem;border-bottom:1px solid #ddd;text-align:left}.score{font-weight:700}</style></head>
-<body><h1>CrateIQ Insights</h1><p id=summary>Loading…</p><h2>Find similar segments</h2><select id=track></select><select id=segment></select><button onclick=search()>Find matches</button><table><thead><tr><th>Score</th><th>Track</th><th>Segment</th><th>Type</th></tr></thead><tbody id=matches></tbody></table>
+<body><h1>CrateIQ Insights</h1><p id=summary>Loading…</p><h2>Find similar segments</h2><select id=track></select><select id=segment></select><button onclick=search()>Find matches</button><table><thead><tr><th>Score</th><th>Track</th><th>Segment</th><th>Type</th><th>Why similar</th></tr></thead><tbody id=matches></tbody></table>
 <script>
 let tracks=[];fetch('/api/tracks').then(r=>r.json()).then(x=>{tracks=x;let s=track; x.forEach(t=>s.add(new Option(t.title,t.id)));loadSegments();});
 fetch('/api/summary').then(r=>r.json()).then(x=>summary.textContent=`${x.tracks} tracks · load a track to inspect its segments`);
 track.onchange=loadSegments;function loadSegments(){fetch(`/api/segments?track_id=${track.value}`).then(r=>r.json()).then(x=>{segment.innerHTML='';x.forEach(s=>segment.add(new Option(`#${s.index} · ${s.type}`,s.index)))})}
-function search(){fetch(`/api/similar?track_id=${track.value}&segment_index=${segment.value}`).then(r=>r.json()).then(x=>matches.innerHTML=x.map(m=>`<tr><td class=score>${m.score.toFixed(3)}</td><td>${m.title}</td><td>#${m.segment_index}</td><td>${m.segment}</td></tr>`).join(''))}
+function search(){fetch(`/api/similar?track_id=${track.value}&segment_index=${segment.value}`).then(r=>r.json()).then(x=>matches.innerHTML=x.map(m=>`<tr><td class=score>${m.score.toFixed(3)}</td><td>${m.title}</td><td>#${m.segment_index}</td><td>${m.segment}</td><td>${m.reasons.join(', ')}</td></tr>`).join(''))}
 </script></body></html>"""
 
 
@@ -43,7 +43,7 @@ class InsightsHandler(BaseHTTPRequestHandler):
             target = next((item for item in items if item["track_id"] == track_id and item["segment_index"] == index), None)
             if target is None: return self._json([])
             engine = FingerprintSimilarityEngine().fit(items)
-            return self._json([{"score": match.score, "track_id": match.track_id, "segment_index": match.segment_index, "segment": match.fingerprint.get("segment"), "title": documents[match.track_id].get("metadata", {}).get("title", match.track_id)} for match in engine.nearest_neighbors(target, items)])
+            return self._json([{"score": match.score, "track_id": match.track_id, "segment_index": match.segment_index, "segment": match.fingerprint.get("segment"), "reasons": match.reasons, "title": documents[match.track_id].get("metadata", {}).get("title", match.track_id)} for match in engine.nearest_neighbors(target, items)])
         self.send_error(404)
 
     def _items(self):
