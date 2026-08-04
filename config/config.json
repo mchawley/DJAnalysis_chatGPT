@@ -5,6 +5,7 @@
   "rekordboxDatabaseLibrary": true,
   "rekordboxDatabaseAnalysis": true,
   "energyEngine": true,
+  "fingerprintEngine": true,
   "supportedFormats": [
     ".mp3",
     ".flac",

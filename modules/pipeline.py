@@ -6,6 +6,7 @@ from modules.json_manager import JsonManager
 from modules.manifest import ManifestManager
 from modules.metadata_plugin import MetadataPlugin
 from modules.energy_plugin import EnergyPlugin
+from modules.fingerprint.plugin import FingerprintPlugin
 from modules.rekordbox.importer import RekordboxImporter
 from modules.rekordbox.matcher import RekordboxMatcher
 from modules.rekordbox.parser import RekordboxParser
@@ -30,12 +31,14 @@ class Pipeline:
         manifest_manager = ManifestManager(cfg['outputRoot'])
         metadata_plugin = MetadataPlugin()
         energy_plugin = EnergyPlugin()
+        fingerprint_plugin = FingerprintPlugin()
         rekordbox_library_enabled = cfg.get("rekordboxDatabaseLibrary", False)
         rekordbox_matcher = None
         rekordbox_xml_loaded = False
         rekordbox_importer = RekordboxImporter()
         rekordbox_analysis_enabled = cfg.get("rekordboxDatabaseAnalysis", False)
         energy_enabled = cfg.get("energyEngine", False)
+        fingerprint_enabled = cfg.get("fingerprintEngine", False)
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
         log.info("Scanning music library...")
@@ -54,6 +57,7 @@ class Pipeline:
         energy_updated = 0
         energy_skipped = 0
         energy_failed = 0
+        fingerprint_updated = fingerprint_skipped = fingerprint_failed = 0
         duplicates = 0
         states = {"new": 0, "modified": 0, "moved": 0, "unchanged": 0}
         replaced_track_ids = set()
@@ -158,6 +162,10 @@ class Pipeline:
             energy_failed += failed
             documents_updated += updated
 
+        if fingerprint_enabled:
+            fingerprint_updated, fingerprint_skipped, fingerprint_failed = self._process_fingerprints(tracks_by_path, track_ids_by_path, jm, fingerprint_plugin)
+            documents_updated += fingerprint_updated
+
         deleted = set(previous_tracks) - set(current_tracks) - replaced_track_ids
         if current_tracks != previous_tracks:
             manifest_manager.save(current_tracks)
@@ -176,6 +184,10 @@ class Pipeline:
             log.info(f'Energy updated     : {energy_updated}')
             log.info(f'Energy skipped     : {energy_skipped}')
             log.info(f'Energy failed      : {energy_failed}')
+        if fingerprint_enabled:
+            log.info(f'Fingerprints updated: {fingerprint_updated}')
+            log.info(f'Fingerprints skipped: {fingerprint_skipped}')
+            log.info(f'Fingerprints failed : {fingerprint_failed}')
         log.info(f'Duplicates         : {duplicates}')
         log.info(f'New               : {states["new"]}')
         log.info(f'Modified          : {states["modified"]}')
@@ -278,6 +290,19 @@ class Pipeline:
                         f"[ERROR] Energy analysis failed for {track.path}: "
                         f"{type(error).__name__}: {error}"
                     )
+        return updated, skipped, failed
+
+    @staticmethod
+    def _process_fingerprints(tracks_by_path, track_ids_by_path, json_manager, plugin):
+        updated = skipped = failed = 0
+        with tqdm(tracks_by_path.items(), desc="Building fingerprints", unit="track") as progress:
+            for path, track in progress:
+                document = json_manager.load(track_ids_by_path[path])
+                if not plugin.needs_processing(document): skipped += 1; continue
+                try:
+                    plugin.process(document, track.path); json_manager.save(track_ids_by_path[path], document); updated += 1
+                except Exception as error:
+                    failed += 1; progress.write(f"[ERROR] Fingerprint failed for {track.path}: {type(error).__name__}: {error}")
         return updated, skipped, failed
 
     @staticmethod
