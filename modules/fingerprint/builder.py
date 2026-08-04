@@ -26,11 +26,17 @@ class FingerprintBuilder:
             spectral_rolloff=self._mean_feature("spectral_rolloff", segment), spectral_bandwidth=self._mean_feature("spectral_bandwidth", segment),
             spectral_flatness=self._mean_feature("spectral_flatness", segment))
         bass = self._bass(segment)
+        onset = raw.onset_strength or [0.0]
+        beat_strength = self._beat_strength(onset, raw.beat_positions)
+        rhythm = RhythmFeatures(density=len(onset) / max(segment.duration, 1), groove=self._groove(onset),
+            syncopation=self._syncopation(onset, raw.beat_positions), percussion_complexity=statistics.pstdev(onset) if len(onset) > 1 else 0.0,
+            beat_strength=beat_strength)
+        mode = "minor" if segment.key and segment.key.upper().endswith("A") else "major" if segment.key else None
         return Fingerprint(segment=segment.segment_type, start_time=segment.start_time, end_time=segment.end_time,
             duration=segment.duration, bars=segment.bars, phrases=segment.phrases,
-            tempo=TempoFeatures(bpm=segment.bpm), harmonic=HarmonicFeatures(key=segment.key, camelot=segment.key),
+            tempo=TempoFeatures(bpm=segment.bpm, tempo_stability=self._tempo_stability(raw.beat_positions), swing=self._swing(onset, raw.beat_positions)), harmonic=HarmonicFeatures(key=segment.key, camelot=segment.key, mode=mode, confidence=1.0 if segment.key else 0.0),
             energy=EnergyFeatures(overall, start, end, peak, minimum, variance, slope, crest), bass=bass,
-            rhythm=RhythmFeatures(density=statistics.fmean(raw.onset_strength) if raw.onset_strength else 0.0), spectrum=spectrum,
+            rhythm=rhythm, spectrum=spectrum,
             vocals=VocalFeatures(), structure=StructuralFeatures(segment.segment_type, segment.confidence, segment.previous_segment, segment.next_segment), raw_features=raw)
 
     def _mean_feature(self, name, segment):
@@ -49,7 +55,26 @@ class FingerprintBuilder:
         if not len(y): return BassFeatures()
         power = np.abs(np.fft.rfft(y)) ** 2; frequencies = np.fft.rfftfreq(len(y), 1 / self.sample_rate); total = power.sum()
         ratio = lambda low, high: float(power[(frequencies >= low) & (frequencies < high)].sum() / total) if total else 0.0
-        return BassFeatures(overall=ratio(0, 200), sub=ratio(20, 60), consistency=0.0)
+        low = ratio(20, 150); envelope = np.abs(y); transient = float(np.max(np.diff(envelope, prepend=envelope[0])))
+        return BassFeatures(overall=ratio(0, 200), sub=ratio(20, 60), kick=low, consistency=1 - min(1, float(np.std(envelope) / (np.mean(envelope) + 1e-9))), transient_strength=transient)
+
+    @staticmethod
+    def _tempo_stability(beats):
+        if len(beats) < 3: return 0.0
+        intervals = [b - a for a, b in zip(beats, beats[1:])]
+        return max(0.0, 1 - statistics.pstdev(intervals) / (statistics.fmean(intervals) + 1e-9))
+    @staticmethod
+    def _groove(onset):
+        return 1 - min(1.0, statistics.pstdev(onset) / (statistics.fmean(onset) + 1e-9)) if len(onset) > 1 else 0.0
+    @staticmethod
+    def _syncopation(onset, beats):
+        return min(1.0, statistics.pstdev(onset) / (max(onset) + 1e-9)) if beats else 0.0
+    @staticmethod
+    def _swing(onset, beats):
+        return min(1.0, statistics.pstdev(onset) / (statistics.fmean(onset) + 1e-9)) if beats and len(onset) > 1 else 0.0
+    @staticmethod
+    def _beat_strength(onset, beats):
+        return statistics.fmean(onset) if beats else 0.0
 
     def _segment(self, segment):
         return self.audio[round(segment.start_time * self.sample_rate):round(segment.end_time * self.sample_rate)]

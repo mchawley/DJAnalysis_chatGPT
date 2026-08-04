@@ -1,3 +1,5 @@
 from modules.pipeline import Pipeline
 
-Pipeline().run()
+
+if __name__ == "__main__":
+    Pipeline().run()
