@@ -3,10 +3,10 @@
   "outputRoot": "./output/tracks",
   "rekordboxXmlPath": null,
   "modules": {
-    "metadata": true,
-    "rekordbox_library": true,
-    "rekordbox_analysis": true,
-    "energy": true,
+    "metadata": false,
+    "rekordbox_library": false,
+    "rekordbox_analysis": false,
+    "energy": false,
     "fingerprint": true
   },
   "supportedFormats": [
