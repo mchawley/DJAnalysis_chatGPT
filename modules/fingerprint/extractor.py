@@ -15,7 +15,7 @@ class FingerprintExtractor:
         if not len(y): return RawAudioFeatures()
         rms = librosa.feature.rms(y=y)[0]; onset = librosa.onset.onset_strength(y=y, sr=self.sample_rate)
         flux = np.maximum(0, np.diff(np.abs(librosa.stft(y)), axis=1)).sum(axis=0)
-        try: lufs = float(self._meter().integrated_loudness(y))
+        try: lufs = float(self._meter().integrated_loudness(np.asarray(y, dtype=np.float64)))
         except ValueError: lufs = None
         return RawAudioFeatures(
             rms=rms.tolist(), lufs=lufs, mfcc=librosa.feature.mfcc(y=y, sr=self.sample_rate, n_mfcc=13).tolist(),

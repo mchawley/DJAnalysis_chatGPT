@@ -72,7 +72,10 @@ class Pipeline:
             for track_id, entry in previous_tracks.items()
         }
         log.info(f'Found {len(tracks)} tracks')
-        log.info("Updating track documents and library metadata...")
+        stages = ["track documents"]
+        if metadata_enabled: stages.append("metadata")
+        if rekordbox_library_enabled: stages.append("Rekordbox library metadata")
+        log.info(f"Updating {' and '.join(stages)}...")
         with tqdm(tracks, desc="Processing tracks", unit="track") as progress:
             for t in progress:
                 progress.set_postfix_str(Path(t.path).name, refresh=False)
