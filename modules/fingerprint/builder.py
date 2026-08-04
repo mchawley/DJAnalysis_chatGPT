@@ -35,7 +35,11 @@ class FingerprintBuilder:
 
     def _mean_feature(self, name, segment):
         try:
-            values = getattr(self.extractor._librosa().feature, name)(y=self._segment(segment), sr=self.sample_rate)
+            function = getattr(self.extractor._librosa().feature, name)
+            kwargs = {"y": self._segment(segment)}
+            if name != "spectral_flatness":
+                kwargs["sr"] = self.sample_rate
+            values = function(**kwargs)
             return float(values.mean())
         except AttributeError: return 0.0
 

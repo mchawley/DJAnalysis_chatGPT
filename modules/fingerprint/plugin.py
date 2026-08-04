@@ -5,7 +5,7 @@ from .models import Segment
 
 
 class FingerprintPlugin:
-    NAME = "fingerprint"; VERSION = "1.0"
+    NAME = "fingerprint"; VERSION = "1.1"
     KIND_TYPES = {1: "INTRO", 2: "GROOVE", 3: "BUILD", 4: "DROP", 5: "BREAKDOWN", 6: "OUTRO"}
 
     def needs_processing(self, document):
