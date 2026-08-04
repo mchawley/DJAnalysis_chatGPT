@@ -24,7 +24,8 @@ class Pipeline:
     REKORDBOX_ANALYSIS_VERSION = "5.0"
 
     def run(self):
-        cfg=Config().data
+        config=Config()
+        cfg=config.data
         log=Logger()
         scanner=Scanner(cfg['musicRoot'],cfg['supportedFormats'])
         jm=JsonManager(cfg['outputRoot'])
@@ -32,13 +33,18 @@ class Pipeline:
         metadata_plugin = MetadataPlugin()
         energy_plugin = EnergyPlugin()
         fingerprint_plugin = FingerprintPlugin()
-        rekordbox_library_enabled = cfg.get("rekordboxDatabaseLibrary", False)
+        metadata_enabled = config.module_enabled("metadata")
+        rekordbox_library_enabled = config.module_enabled(
+            "rekordbox_library", cfg.get("rekordboxDatabaseLibrary", False)
+        )
         rekordbox_matcher = None
         rekordbox_xml_loaded = False
         rekordbox_importer = RekordboxImporter()
-        rekordbox_analysis_enabled = cfg.get("rekordboxDatabaseAnalysis", False)
-        energy_enabled = cfg.get("energyEngine", False)
-        fingerprint_enabled = cfg.get("fingerprintEngine", False)
+        rekordbox_analysis_enabled = config.module_enabled(
+            "rekordbox_analysis", cfg.get("rekordboxDatabaseAnalysis", False)
+        )
+        energy_enabled = config.module_enabled("energy", cfg.get("energyEngine", False))
+        fingerprint_enabled = config.module_enabled("fingerprint", cfg.get("fingerprintEngine", False))
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
         log.info("Scanning music library...")
@@ -107,7 +113,7 @@ class Pipeline:
                 if "schemaVersion" not in system:
                     system["schemaVersion"] = "0.1"
                     document_changed = True
-                if metadata_plugin.needs_processing(doc, t):
+                if metadata_enabled and metadata_plugin.needs_processing(doc, t):
                     try:
                         metadata_plugin.process(doc, t)
                         metadata_updated += 1

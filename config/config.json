@@ -2,10 +2,13 @@
   "musicRoot": "/Users/manishchawley/Music",
   "outputRoot": "./output/tracks",
   "rekordboxXmlPath": null,
-  "rekordboxDatabaseLibrary": true,
-  "rekordboxDatabaseAnalysis": true,
-  "energyEngine": true,
-  "fingerprintEngine": true,
+  "modules": {
+    "metadata": true,
+    "rekordbox_library": true,
+    "rekordbox_analysis": true,
+    "energy": true,
+    "fingerprint": true
+  },
   "supportedFormats": [
     ".mp3",
     ".flac",
