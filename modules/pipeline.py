@@ -28,7 +28,8 @@ class Pipeline:
         config=Config()
         cfg=config.data
         log=Logger()
-        scanner=Scanner(cfg['musicRoot'],cfg['supportedFormats'])
+        music_roots = cfg.get("musicRoots") or [cfg["musicRoot"]]
+        scanner=Scanner(music_roots,cfg['supportedFormats'])
         jm=JsonManager(cfg['outputRoot'])
         manifest_manager = ManifestManager(cfg['outputRoot'])
         metadata_plugin = MetadataPlugin()

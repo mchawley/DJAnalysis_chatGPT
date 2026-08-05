@@ -1,5 +1,7 @@
 {
-  "musicRoot": "/Users/manishchawley/Music",
+  "musicRoots": [
+    "/Users/manishchawley/Music"
+  ],
   "outputRoot": "./output/tracks",
   "rekordboxXmlPath": null,
   "analysisWorkers": 2,
