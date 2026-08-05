@@ -15,7 +15,7 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertEqual(result[-1], 499.0)
 
     def test_range_meter_prefers_absolute_label(self):
-        self.assertEqual(InsightsHandler._meter("Low", "High"), {"percent": 100, "tone": "high", "state": "High"})
+        self.assertEqual(InsightsHandler._meter("Low", "High"), {"percent": 100, "tone": "high", "state": "High", "track": {"state": "Low", "tone": "low"}, "absolute": {"state": "High", "tone": "high"}})
 
     def test_absolute_labels_cover_profile_metrics(self):
         self.assertEqual(InsightsHandler._absolute_label("transient", 0.12), "Mid")
@@ -30,10 +30,23 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertEqual(InsightsHandler._meter("High", "High")["percent"], 100)
         self.assertEqual(InsightsHandler._meter("—", "—")["tone"], "neutral")
 
+    def test_equal_track_values_are_not_ranked_high(self):
+        fingerprints = [{"energy": {"overall": 0.0}}] * 3
+        self.assertEqual(InsightsHandler._range_label(fingerprints[0], fingerprints, "energy.overall"), "Even")
+
+    def test_waveform_prefers_detail_and_normalizes_samples(self):
+        waveform = InsightsHandler._waveform_view({"waveformPreview": [1, 2], "waveformDetail": [2, 4, 8]})
+        self.assertTrue(waveform["available"])
+        self.assertEqual(waveform["source"], "detail")
+        self.assertEqual(waveform["samples"], [0.25, 0.5, 1.0])
+        self.assertEqual(InsightsHandler._waveform_view({})["available"], False)
+
     def test_html_uses_block_meter_fills_and_bounded_charts(self):
         self.assertIn(".fill{display:block", HTML)
         self.assertIn(".chart{height:155px;width:100%;overflow:hidden", HTML)
         self.assertIn(".chart svg{display:block;width:100%;height:100%}", HTML)
+        self.assertIn(".waveform{position:relative;height:80px", HTML)
+        self.assertIn("Track: ${meter.track.state}", HTML)
 
     def test_catalog_returns_manifest_title_and_artist_with_fallback(self):
         with tempfile.TemporaryDirectory() as directory:
