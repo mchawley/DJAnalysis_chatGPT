@@ -57,6 +57,7 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('id="track-search"', HTML)
         self.assertIn("ArrowDown", HTML)
         self.assertIn("No tracks match this search.", HTML)
+        self.assertIn("search.addEventListener('focus',()=>showResults(true))", HTML)
 
     def test_chart_summaries_describe_shapes(self):
         self.assertIn("builds", InsightsHandler._rms_summary([1, 1, 1, 2, 2, 2]))
