@@ -147,6 +147,9 @@ class Pipeline:
                             rekordbox_unmatched += 1
                 elif rekordbox_library_enabled:
                     rekordbox_skipped += 1
+                metadata = doc.get("metadata", {})
+                entry["title"] = metadata.get("title") or Path(t.path).stem
+                entry["artist"] = metadata.get("artist") or ""
                 if document_changed:
                     jm.save(tid,doc)
                     documents_updated += 1
