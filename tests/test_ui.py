@@ -72,6 +72,13 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("No tracks match this search.", HTML)
         self.assertIn("search.addEventListener('focus',()=>showResults(true))", HTML)
 
+    def test_html_supports_preview_then_promote_similarity_workflow(self):
+        self.assertIn('id="comparison"', HTML)
+        self.assertIn("function previewMatch", HTML)
+        self.assertIn("node.addEventListener('click',()=>previewMatch", HTML)
+        self.assertIn("node.addEventListener('dblclick',()=>chooseTrack", HTML)
+        self.assertIn("function comparisonTimeline", HTML)
+
     def test_chart_summaries_describe_shapes(self):
         self.assertIn("builds", InsightsHandler._rms_summary([1, 1, 1, 2, 2, 2]))
         self.assertIn("eases", InsightsHandler._rms_summary([2, 2, 2, 1, 1, 1]))
