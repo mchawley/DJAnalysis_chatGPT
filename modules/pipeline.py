@@ -171,6 +171,10 @@ class Pipeline:
                 tracks_by_path[self._normalise_path(t.path)] = t
                 states[state] += 1
 
+        if rekordbox_library_enabled and not rekordbox_playlists and cfg.get("rekordboxXmlPath"):
+            _matcher, rekordbox_playlists = self._load_rekordbox_matcher(
+                cfg.get("rekordboxXmlPath"), log
+            )
         if rekordbox_library_enabled and rekordbox_playlists:
             sources = []
             for index, playlist in enumerate(rekordbox_playlists):
