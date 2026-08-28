@@ -10,7 +10,9 @@ class FingerprintPlugin:
 
     def needs_processing(self, document):
         status = document.get("system", {}).get("modules", {}).get(self.NAME, {})
-        return bool(document.get("analysis", {}).get("phrases")) and not (status.get("completed") and status.get("version") == self.VERSION)
+        analysis = document.get("analysis", {})
+        has_segments = bool(analysis.get("phrases")) and bool(analysis.get("beatPositions"))
+        return has_segments and not (status.get("completed") and status.get("version") == self.VERSION)
 
     def process(self, document, path):
         document.setdefault("analysis", {})["fingerprints"] = build_fingerprints(

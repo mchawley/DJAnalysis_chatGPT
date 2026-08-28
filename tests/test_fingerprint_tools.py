@@ -43,5 +43,12 @@ class FingerprintToolsTest(unittest.TestCase):
         self.assertTrue(all(value in (0, 1) for value in onset + kick))
         self.assertEqual(FingerprintBuilder(np.array([0.0]), 4)._beat_patterns(Segment("GROOVE", 0.0, 1.0)), ([], []))
 
+    def test_requires_rekordbox_phrases_and_beat_positions(self):
+        from modules.fingerprint.plugin import FingerprintPlugin
+        plugin = FingerprintPlugin()
+        self.assertFalse(plugin.needs_processing({"analysis": {"phrases": [{}]}}))
+        self.assertFalse(plugin.needs_processing({"analysis": {"beatPositions": [0.0]}}))
+        self.assertTrue(plugin.needs_processing({"analysis": {"phrases": [{}], "beatPositions": [0.0]}}))
+
     def test_flags_missing_core_features(self):
         self.assertIn("energy.overall", FingerprintValidator().validate({}))

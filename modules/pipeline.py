@@ -15,6 +15,7 @@ from modules.rekordbox.database import (
     RekordboxDatabaseAnalysisReader,
     RekordboxDatabaseLibraryReader,
 )
+from models.track import Track
 from datetime import datetime, timezone
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
@@ -47,10 +48,13 @@ class Pipeline:
         )
         energy_enabled = config.module_enabled("energy", cfg.get("energyEngine", False))
         fingerprint_enabled = config.module_enabled("fingerprint", cfg.get("fingerprintEngine", False))
+        fingerprint_only = fingerprint_enabled and not any((
+            metadata_enabled, rekordbox_library_enabled, rekordbox_analysis_enabled, energy_enabled
+        ))
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
-        log.info("Scanning music library...")
-        tracks=scanner.scan()
+        log.info("Finding analyzed tracks..." if fingerprint_only else "Scanning music library...")
+        tracks = self._analyzed_tracks(jm) if fingerprint_only else scanner.scan()
         current_tracks = {}
         track_ids_by_path = {}
         tracks_by_path = {}
@@ -74,7 +78,7 @@ class Pipeline:
             for track_id, entry in previous_tracks.items()
         }
         log.info(f'Found {len(tracks)} tracks')
-        stages = ["track documents"]
+        stages = ["fingerprint analysis"] if fingerprint_only else ["track documents"]
         if metadata_enabled: stages.append("metadata")
         if rekordbox_library_enabled: stages.append("Rekordbox library metadata")
         log.info(f"Updating {' and '.join(stages)}...")
@@ -180,8 +184,8 @@ class Pipeline:
             fingerprint_updated, fingerprint_skipped, fingerprint_failed = self._process_fingerprints(tracks_by_path, track_ids_by_path, jm, fingerprint_plugin, cfg.get("analysisWorkers", 1))
             documents_updated += fingerprint_updated
 
-        deleted = set(previous_tracks) - set(current_tracks) - replaced_track_ids
-        if current_tracks != previous_tracks:
+        deleted = set() if fingerprint_only else set(previous_tracks) - set(current_tracks) - replaced_track_ids
+        if not fingerprint_only and current_tracks != previous_tracks:
             manifest_manager.save(current_tracks)
 
         log.info(f'Documents updated : {documents_updated}')
@@ -310,30 +314,30 @@ class Pipeline:
     def _process_fingerprints(tracks_by_path, track_ids_by_path, json_manager, plugin, workers):
         from modules.fingerprint.plugin import build_fingerprints
         updated = skipped = failed = 0
+        eligible = []
+        for path, track in tracks_by_path.items():
+            document = json_manager.load(track_ids_by_path[path])
+            if plugin.needs_processing(document):
+                eligible.append((path, track, document, track_ids_by_path[path]))
+            else:
+                skipped += 1
         if workers <= 1:
-            with tqdm(tracks_by_path.items(), desc="Building fingerprints", unit="track") as progress:
-                for path, track in progress:
-                    document = json_manager.load(track_ids_by_path[path])
-                    if not plugin.needs_processing(document):
-                        skipped += 1
-                        continue
+            with tqdm(eligible, desc="Building fingerprints", unit="track") as progress:
+                for _path, track, document, track_id in progress:
                     try:
                         document["analysis"]["fingerprints"] = build_fingerprints(track.path, document["analysis"], document.get("library", {}))
-                        plugin.mark_complete(document); json_manager.save(track_ids_by_path[path], document); updated += 1
+                        plugin.mark_complete(document); json_manager.save(track_id, document); updated += 1
                     except Exception as error:
                         failed += 1; progress.write(f"[ERROR] Fingerprint failed for {track.path}: {type(error).__name__}: {error}")
             return updated, skipped, failed
         pending = {}
-        items = iter(tracks_by_path.items())
-        with tqdm(total=len(tracks_by_path), desc="Building fingerprints", unit="track") as progress, ProcessPoolExecutor(max_workers=max(1, workers)) as executor:
+        items = iter(eligible)
+        with tqdm(total=len(eligible), desc="Building fingerprints", unit="track") as progress, ProcessPoolExecutor(max_workers=max(1, workers)) as executor:
             def submit_next():
-                nonlocal skipped
-                try: path, track = next(items)
+                try: _path, track, document, track_id = next(items)
                 except StopIteration: return False
-                document = json_manager.load(track_ids_by_path[path])
-                if not plugin.needs_processing(document): skipped += 1; progress.update(1); return True
                 future = executor.submit(build_fingerprints, track.path, document["analysis"], document.get("library", {}))
-                pending[future] = (track, document, track_ids_by_path[path]); return True
+                pending[future] = (track, document, track_id); return True
             while len(pending) < max(1, workers) * 2 and submit_next(): pass
             while pending:
                 done, _ = wait(pending, return_when=FIRST_COMPLETED)
@@ -346,6 +350,22 @@ class Pipeline:
                     progress.update(1)
                 while len(pending) < max(1, workers) * 2 and submit_next(): pass
         return updated, skipped, failed
+
+    @staticmethod
+    def _analyzed_tracks(json_manager):
+        """Return only existing tracks eligible for fingerprint analysis."""
+        tracks = []
+        for json_path in json_manager.output_directory.glob("*.json"):
+            try:
+                document = json_manager.load(json_path.stem)
+                analysis = document.get("analysis", {})
+                source_path = document.get("system", {}).get("sourcePath")
+                if source_path and Path(source_path).is_file() and analysis.get("phrases") and analysis.get("beatPositions"):
+                    source = Path(source_path)
+                    tracks.append(Track(str(source), source.name, source.suffix.lower()))
+            except (OSError, ValueError):
+                continue
+        return sorted(tracks, key=lambda track: track.path)
 
     @staticmethod
     def _normalise_path(path):
