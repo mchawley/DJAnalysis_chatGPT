@@ -43,6 +43,7 @@ class InsightsHandlerTest(unittest.TestCase):
 
     def test_camelot_and_segment_envelope_views(self):
         self.assertEqual(InsightsHandler._camelot("D minor"), "7A")
+        self.assertEqual(InsightsHandler._camelot("Dm"), "7A")
         self.assertEqual(InsightsHandler._camelot("C# major"), "3B")
         self.assertEqual(InsightsHandler._camelot("8a"), "8A")
         envelope = InsightsHandler._envelope([{"start_time": 0, "end_time": 10, "energy": {"overall": .2}, "bass": {"overall": .3}, "rhythm": {"density": 2}}])
