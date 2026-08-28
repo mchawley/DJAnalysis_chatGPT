@@ -79,6 +79,8 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("ArrowDown", HTML)
         self.assertIn("No tracks match this search.", HTML)
         self.assertIn("search.addEventListener('focus',()=>showResults(true))", HTML)
+        self.assertIn("padStart(2,'0')", HTML)
+        self.assertIn("● Rhythm", HTML)
 
     def test_html_supports_preview_then_promote_similarity_workflow(self):
         self.assertIn('id="comparison"', HTML)
