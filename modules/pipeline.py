@@ -4,6 +4,7 @@ from modules.scanner import Scanner
 from modules.registry import Registry
 from modules.json_manager import JsonManager
 from modules.manifest import ManifestManager
+from modules.playlist_store import PlaylistStore
 from modules.metadata_plugin import MetadataPlugin
 from modules.energy_plugin import EnergyPlugin
 from modules.fingerprint.plugin import FingerprintPlugin
@@ -41,6 +42,7 @@ class Pipeline:
             "rekordbox_library", cfg.get("rekordboxDatabaseLibrary", False)
         )
         rekordbox_matcher = None
+        rekordbox_playlists = []
         rekordbox_xml_loaded = False
         rekordbox_importer = RekordboxImporter()
         rekordbox_analysis_enabled = config.module_enabled(
@@ -141,7 +143,9 @@ class Pipeline:
                     doc, "rekordbox_library", self.REKORDBOX_LIBRARY_VERSION
                 ):
                     if not rekordbox_xml_loaded:
-                        rekordbox_matcher = self._load_rekordbox_database_matcher(log)
+                        rekordbox_matcher, rekordbox_playlists = self._load_rekordbox_matcher(
+                            cfg.get("rekordboxXmlPath"), log
+                        )
                         rekordbox_xml_loaded = True
                     if rekordbox_matcher:
                         rekordbox_match = rekordbox_matcher.match(t, doc)
@@ -166,6 +170,17 @@ class Pipeline:
                 track_ids_by_path[self._normalise_path(t.path)] = tid
                 tracks_by_path[self._normalise_path(t.path)] = t
                 states[state] += 1
+
+        if rekordbox_library_enabled and rekordbox_playlists:
+            sources = []
+            for index, playlist in enumerate(rekordbox_playlists):
+                track_ids = [track_ids_by_path.get(self._normalise_path(location)) for location in playlist.track_locations]
+                sources.append({
+                    "id": f"rekordbox-{index}", "name": playlist.name, "source": "rekordbox",
+                    "trackIds": [track_id for track_id in track_ids if track_id],
+                    "unmatchedCount": sum(track_id is None for track_id in track_ids),
+                })
+            PlaylistStore(cfg["outputRoot"]).save_sources(sources)
 
         if rekordbox_analysis_enabled:
             imported, skipped = self._import_rekordbox_analyses(
@@ -220,18 +235,20 @@ class Pipeline:
     @staticmethod
     def _load_rekordbox_matcher(xml_path, log):
         if not xml_path:
-            return None
+            matcher = Pipeline._load_rekordbox_database_matcher(log)
+            return matcher, []
         try:
-            rekordbox_tracks = RekordboxParser().parse(xml_path)
+            parser = RekordboxParser()
+            rekordbox_tracks = parser.parse(xml_path)
         except Exception as error:
             log.error(
                 f"Could not read Rekordbox XML at {xml_path}: "
                 f"{type(error).__name__}: {error}"
             )
-            return None
+            return None, []
 
         log.info(f"Loaded {len(rekordbox_tracks)} Rekordbox tracks")
-        return RekordboxMatcher(rekordbox_tracks)
+        return RekordboxMatcher(rekordbox_tracks), parser.playlists
 
     @staticmethod
     def _load_rekordbox_database_matcher(log):

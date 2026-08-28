@@ -52,6 +52,12 @@ class RekordboxParserTest(unittest.TestCase):
         self.assertEqual(self.track.hot_cues[0].number, 2)
         self.assertEqual(self.track.beat_grid[0].bpm, 122.0)
 
+    def test_exposes_ordered_playlist_index(self):
+        parser = RekordboxParser()
+        parser.parse(self.xml_path)
+        self.assertEqual(parser.playlists[0].name, "ROOT / Warmup")
+        self.assertEqual(parser.playlists[0].track_locations, ["/Users/DJ/Track One.mp3"])
+
     def test_matcher_uses_requested_confidence_order(self):
         matcher = RekordboxMatcher([self.track])
         path_match = matcher.match(Track("/Users/DJ/Track One.mp3", "Track One.mp3", ".mp3"))

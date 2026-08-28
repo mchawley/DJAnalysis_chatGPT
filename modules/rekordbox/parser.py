@@ -18,6 +18,7 @@ class RekordboxParser:
         }
 
         playlists = self._parse_playlists(root, tracks_by_id)
+        self.playlists = playlists
         for playlist in playlists:
             for location in playlist.track_locations:
                 for track in tracks_by_id.values():

@@ -2,24 +2,27 @@
 
 import argparse
 import json
+from statistics import median
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from modules.fingerprint import FingerprintSimilarityEngine
+from modules.playlist_store import PlaylistStore
+from modules.playlist_ui import PLAYLIST_HTML
 
 
 HTML = r"""<!doctype html>
 <html><head><meta charset="utf-8"><title>CrateIQ Insights</title><style>
 :root{--bg:#0b1020;--panel:#151d32;--line:#28334f;--muted:#9aa6bf;--text:#edf2ff;--cyan:#54d5ff;--low:#54d5ff;--mid:#f6c967;--high:#ff7285;--neutral:#526079;--compare:#ba8df5}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui}.shell{width:min(1600px,96vw);margin:auto;padding:28px 0 60px}.top{display:flex;justify-content:space-between;align-items:end;border-bottom:1px solid var(--line);padding-bottom:22px}.eyebrow{color:var(--cyan);font-size:12px;letter-spacing:.13em;text-transform:uppercase}h1{margin:4px 0;font-size:34px}.picker{position:relative;min-width:420px}input,button{background:#1b2740;color:var(--text);border:1px solid #3c4d72;border-radius:8px;padding:10px 12px}input{width:100%}button{cursor:pointer;background:var(--cyan);color:#06101b;font-weight:700}.results{position:absolute;z-index:5;top:calc(100% + 6px);left:0;right:0;max-height:320px;overflow:auto;padding:6px;background:#10182a;border:1px solid #3c4d72;border-radius:10px;box-shadow:0 14px 32px #0008}.results[hidden]{display:none}.track-option{display:block;width:100%;padding:10px;text-align:left;background:transparent;color:var(--text);border:0;border-radius:6px}.track-option:hover,.track-option.active{background:#263858}.track-option small{display:block;color:var(--muted);margin-top:2px}.no-results{padding:12px;color:var(--muted)}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:20px}.hero{display:flex;justify-content:space-between;gap:20px}.title{font-size:22px;font-weight:700}.muted{color:var(--muted)}.stats{display:flex;gap:28px}.stats b{display:block;font-size:20px}.waveform{position:relative;height:80px;margin-top:16px;overflow:hidden;background:#0f1628;border-radius:8px}.waveform svg{display:block;width:100%;height:100%}.wave-selection{position:absolute;top:0;bottom:0;background:#54d5ff24;border:1px solid var(--cyan);pointer-events:none}.waveform.compare .wave-selection{background:#ba8df524;border-color:var(--compare)}.waveform-empty{display:grid;place-items:center;height:100%;color:var(--muted);font-size:12px}.timeline{display:flex;width:100%;height:94px;margin:12px 0 8px;border-radius:8px;overflow:hidden;background:#202a40}.part{min-width:3px;border-right:2px solid #0b1020;padding:9px 8px;color:#0b1020;font-size:11px;font-weight:800;overflow:hidden;cursor:pointer}.part.selected{outline:3px solid white;z-index:1}.INTRO{background:#74b6ff}.GROOVE{background:#71d69b}.BUILD{background:#f6c967}.DROP{background:#ff808d}.BREAKDOWN{background:#ba8df5}.OUTRO{background:#a9b4c8}.CUSTOM{background:#72809a}.legend{display:flex;gap:14px;color:var(--muted);font-size:12px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}.deck{display:grid;grid-template-columns:1.3fr .7fr;gap:20px}.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.chart-card{min-width:0}.chart-card>p:first-child{margin:12px 0}.chart{height:155px;width:100%;overflow:hidden;background:#0f1628;border-radius:10px}.chart svg{display:block;width:100%;height:100%}.chart-note{min-height:55px;font-size:12px;line-height:1.4;margin:10px 2px 0;overflow-wrap:anywhere}.chart-note b{color:var(--text)}.metric-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.metric{background:#10182a;border-radius:10px;padding:13px}.metric h3{margin:0 0 10px;font-size:13px}.row{display:grid;grid-template-columns:80px minmax(0,1fr) 50px;gap:8px;align-items:center;font-size:12px;margin:8px 0}.bar{height:8px;background:#28334f;border-radius:99px;overflow:hidden}.fill{display:block;height:100%;border-radius:99px}.fill.low{background:var(--low)}.fill.mid{background:var(--mid)}.fill.high{background:var(--high)}.fill.neutral{background:var(--neutral)}.references{grid-column:2/4;display:flex;gap:7px;flex-wrap:wrap;font-size:10px}.reference{color:var(--muted)}.reference:before{content:'';display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:50%;background:var(--neutral)}.reference.low:before{background:var(--low)}.reference.mid:before{background:var(--mid)}.reference.high:before{background:var(--high)}.matches{display:grid;gap:10px;margin-top:12px}.match{display:flex;justify-content:space-between;gap:16px;background:#10182a;border-radius:10px;padding:13px;cursor:pointer}.match:hover,.match.selected{outline:1px solid var(--compare)}.comparison .eyebrow{color:var(--compare)}@media(max-width:850px){.deck,.charts{grid-template-columns:1fr}.top,.hero{display:block}.stats{margin-top:15px}.picker{min-width:0;margin-top:18px}}
-</style></head><body><main class="shell"><header class="top"><div><div class="eyebrow">Track analysis deck</div><h1>CrateIQ Insights</h1><div id="summary" class="muted">Loading library…</div></div><div class="picker"><input id="track-search" type="search" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="track-results" placeholder="Search title or artist"><div id="track-results" class="results" role="listbox" hidden></div></div></header><section id="deck"></section></main><script>
+</style></head><body><main class="shell"><header class="top"><div><div class="eyebrow">Track analysis deck</div><h1>CrateIQ Insights</h1><div id="summary" class="muted">Loading library…</div></div><div><a href="/playlists" style="color:var(--cyan);display:block;margin-bottom:10px">Playlist analysis</a><div class="picker"><input id="track-search" type="search" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="track-results" placeholder="Search title or artist"><div id="track-results" class="results" role="listbox" hidden></div></div></div></header><section id="deck"></section></main><script>
 let selected=0,currentTrack='',tracks=[],resultIndex=-1,comparison=null;const $=id=>document.getElementById(id);const fmt=v=>{if(typeof v!=='number'||!Number.isFinite(v))return '—';if(v!==0&&Math.abs(v)<.005)return v<0?'−<0.01':'<0.01';return Math.abs(v)>=100?Math.round(v).toString():v.toFixed(2)};const time=v=>{if(typeof v!=='number'||!Number.isFinite(v))return '—';let total=Math.max(0,Math.round(v));return `${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`};const escape=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));const label=item=>item.artist?`${item.title} · ${item.artist}`:item.title;const search=$('track-search'),results=$('track-results');
 function matches(showAll=false){let query=showAll?'':search.value.trim().toLowerCase();return tracks.filter(item=>!query||`${item.title} ${item.artist||''}`.toLowerCase().includes(query)).slice(0,30)}
 function showResults(showAll=false){let list=matches(showAll);resultIndex=-1;results.hidden=false;search.setAttribute('aria-expanded','true');results.innerHTML=list.length?list.map((item,index)=>`<button class="track-option" role="option" data-index="${index}"><strong>${escape(item.title)}</strong>${item.artist?`<small>${escape(item.artist)}</small>`:''}</button>`).join(''):'<div class="no-results">No tracks match this search.</div>';results._items=list}
 function hideResults(){results.hidden=true;search.setAttribute('aria-expanded','false');resultIndex=-1}
 function chooseTrack(item,segment=0){if(!item)return;comparison=null;currentTrack=item.id;selected=segment;search.value=label(item);hideResults();load()}
 search.addEventListener('focus',()=>showResults(true));search.addEventListener('input',()=>showResults());search.addEventListener('keydown',event=>{let items=results._items||matches();if(event.key==='Escape'){hideResults();return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(!items.length)return;resultIndex=(resultIndex+(event.key==='ArrowDown'?1:items.length-1))%items.length;results.querySelectorAll('.track-option').forEach((node,index)=>node.classList.toggle('active',index===resultIndex));return}if(event.key==='Enter'){event.preventDefault();chooseTrack(items[resultIndex<0?0:resultIndex])}});results.addEventListener('mousedown',event=>{let button=event.target.closest('.track-option');if(button)chooseTrack((results._items||[])[Number(button.dataset.index)])});document.addEventListener('mousedown',event=>{if(!event.target.closest('.picker'))hideResults()});
-fetch('/api/tracks').then(response=>response.json()).then(items=>{tracks=items;currentTrack=tracks[0]?.id||'';search.value=tracks[0]?label(tracks[0]):'';if(currentTrack)load()});fetch('/api/summary').then(response=>response.json()).then(data=>$('summary').textContent=`${data.tracks} analyzed tracks · select a section to compare`);
+fetch('/api/tracks').then(response=>response.json()).then(items=>{tracks=items;let requested=new URLSearchParams(location.search).get('track_id');currentTrack=tracks.find(item=>item.id===requested)?.id||tracks[0]?.id||'';let current=tracks.find(item=>item.id===currentTrack);search.value=current?label(current):'';if(currentTrack)load()});fetch('/api/summary').then(response=>response.json()).then(data=>$('summary').textContent=`${data.tracks} analyzed tracks · select a section to compare`);
 function meter(labelName,item,key){let value=item.features[key],meter=item.meters[key]||{percent:0,tone:'neutral',track:{state:'—',tone:'neutral'},absolute:{state:'—',tone:'neutral'}};return `<div class="row"><span>${labelName}</span><span class="bar"><span class="fill ${meter.tone}" style="width:${meter.percent}%"></span></span><b>${fmt(value?.value)}</b><span class="references"><span class="reference ${meter.track.tone}">Track: ${meter.track.state}</span><span class="reference ${meter.absolute.tone}">Absolute: ${meter.absolute.state}</span></span></div>`}
 function chart(values,color){let width=400,height=150,max=Math.max(...values,1),last=Math.max(values.length-1,1),points=values.map((value,index)=>`${index*width/last},${height-value/max*(height-10)-5}`).join(' ');return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"><polyline fill="none" stroke="${color}" stroke-width="3" points="${points}"/></svg>`}
 function chartPanel(labelName,values,color,meaning,summary){return `<div class="chart-card"><p class="muted">${labelName}</p><div class="chart">${chart(values,color)}</div><p class="muted chart-note"><b>${escape(summary)}</b><br>${meaning}</p></div>`}
@@ -41,10 +44,17 @@ class InsightsHandler(BaseHTTPRequestHandler):
         request = urlparse(self.path)
         if request.path == "/":
             return self._send(HTML, "text/html")
+        if request.path == "/playlists":
+            return self._send(PLAYLIST_HTML, "text/html")
         if request.path == "/api/summary":
             return self._json({"tracks": len(self._catalog())})
         if request.path == "/api/tracks":
             return self._json(self._catalog())
+        if request.path == "/api/playlists":
+            return self._json(self._playlist_catalog())
+        if request.path == "/api/playlist":
+            playlist_id = parse_qs(request.query).get("playlist_id", [""])[0]
+            return self._json(self._playlist_detail(playlist_id))
         if request.path == "/api/segments":
             track_id = parse_qs(request.query).get("track_id", [""])[0]
             path = self.output_root / f"{track_id}.json"
@@ -79,6 +89,27 @@ class InsightsHandler(BaseHTTPRequestHandler):
             return self._json([{"score": match.score, "track_id": match.track_id, "segment_index": match.segment_index, "segment": match.fingerprint.get("segment"), "reasons": match.reasons, "title": documents[match.track_id].get("metadata", {}).get("title", match.track_id)} for match in engine.nearest_neighbors(target, items)])
         self.send_error(404)
 
+    def do_POST(self):
+        if urlparse(self.path).path != "/api/playlists":
+            self.send_error(404)
+            return
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(size) or b"{}")
+        except (ValueError, OSError):
+            return self._json({"error": "Invalid playlist request"})
+        store = PlaylistStore(self.output_root)
+        action = payload.get("action")
+        if action == "create":
+            return self._json(store.create(payload.get("name", ""), payload.get("track_ids", [])))
+        if action == "update":
+            return self._json(store.update(payload.get("playlist_id", ""), payload.get("name"), payload.get("track_ids")) or {})
+        if action == "restore":
+            return self._json(store.restore(payload.get("playlist_id", "")) or {})
+        if action == "delete":
+            return self._json({"deleted": store.delete(payload.get("playlist_id", ""))})
+        return self._json({"error": "Unknown playlist action"})
+
     def _items(self):
         if self.similarity_cache is not None:
             return self.similarity_cache
@@ -97,6 +128,100 @@ class InsightsHandler(BaseHTTPRequestHandler):
             tracks = json.loads(manifest.read_text()).get("tracks", {})
             return sorted(({"id": track_id, "title": entry.get("title") or Path(entry.get("path", track_id)).stem, "artist": entry.get("artist") or ""} for track_id, entry in tracks.items()), key=lambda entry: (entry["title"].lower(), entry["artist"].lower()))
         return [{"id": path.stem, "title": path.stem, "artist": ""} for path in self.output_root.glob("*.json")]
+
+    def _playlist_catalog(self):
+        return [{
+            "id": item["id"], "name": item["name"], "source": item.get("source", "custom"),
+            "trackCount": len(item.get("trackIds", [])), "unmatchedCount": item.get("unmatchedCount", 0),
+        } for item in PlaylistStore(self.output_root).all_playlists()]
+
+    def _playlist_detail(self, playlist_id):
+        playlist = next((item for item in PlaylistStore(self.output_root).all_playlists() if item["id"] == playlist_id), None)
+        if playlist is None:
+            return {"id": playlist_id, "name": "Playlist not found", "tracks": [], "trends": {}}
+        tracks = [self._playlist_track(track_id) for track_id in playlist.get("trackIds", [])]
+        values = [track for track in tracks if track["available"]]
+        for index, track in enumerate(tracks):
+            track["transition"] = self._transition(track, tracks, index)
+            track["outlier"] = self._outlier(track, values)
+        return {
+            "id": playlist_id, "name": playlist["name"], "source": playlist.get("source", "custom"),
+            "tracks": tracks,
+            "trends": {key: self._normalize([track["features"].get(key) for track in tracks]) for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
+        }
+
+    def _playlist_track(self, track_id):
+        path = self.output_root / f"{track_id}.json"
+        catalog = next((item for item in self._catalog() if item["id"] == track_id), {"title": track_id, "artist": ""})
+        if not path.exists():
+            return {"id": track_id, **catalog, "bpm": None, "key": None, "camelot": None, "available": False, "features": {}}
+        doc = json.loads(path.read_text())
+        fingerprints = doc.get("analysis", {}).get("fingerprints", [])
+        def average(path_name):
+            values = [self._value(item, path_name) for item in fingerprints]
+            values = [value for value in values if isinstance(value, (int, float))]
+            return sum(values) / len(values) if values else None
+        key = doc.get("library", {}).get("key")
+        features = {
+            "energy": average("energy.overall"), "bass": average("bass.overall"),
+            "rhythm": average("rhythm.density"), "brightness": average("spectrum.spectral_centroid"),
+            "tempo": doc.get("library", {}).get("bpm"),
+        }
+        return {"id": track_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "available": bool(fingerprints), "features": features}
+
+    @staticmethod
+    def _normalize(values):
+        valid = [value for value in values if isinstance(value, (int, float))]
+        if not valid:
+            return [0.0 for _ in values]
+        low, high = min(valid), max(valid)
+        if high - low < 1e-9:
+            return [.5 if isinstance(value, (int, float)) else 0.0 for value in values]
+        return [(value - low) / (high - low) if isinstance(value, (int, float)) else 0.0 for value in values]
+
+    def _transition(self, track, tracks, index):
+        neighbors = [item for item in (tracks[index - 1] if index else None, tracks[index + 1] if index + 1 < len(tracks) else None) if item and item["available"]]
+        if not track["available"] or not neighbors:
+            return {"label": "No transition data", "score": 0, "severity": "none", "reasons": []}
+        changes, reasons = [], []
+        for key, label, threshold in (("energy", "energy", .12), ("bass", "bass", .18), ("rhythm", "rhythm", 20), ("brightness", "brightness", 900)):
+            value = track["features"].get(key)
+            neighbor_values = [item["features"].get(key) for item in neighbors if isinstance(item["features"].get(key), (int, float))]
+            if isinstance(value, (int, float)) and neighbor_values and abs(value - sum(neighbor_values) / len(neighbor_values)) > threshold:
+                changes.append(1); reasons.append(f"abrupt {label} change")
+        bpm = track.get("bpm")
+        neighbor_bpms = [item.get("bpm") for item in neighbors if isinstance(item.get("bpm"), (int, float))]
+        if isinstance(bpm, (int, float)) and neighbor_bpms and abs(bpm - sum(neighbor_bpms) / len(neighbor_bpms)) > 8:
+            changes.append(1); reasons.append("large BPM jump")
+        if track.get("camelot") and any(item.get("camelot") and not self._compatible_keys(track["camelot"], item["camelot"]) for item in neighbors):
+            changes.append(1); reasons.append("key clash risk")
+        score = len(changes)
+        return {"label": "Transition break" if score else "Smooth transition", "score": score, "severity": "high" if score >= 3 else "medium", "reasons": reasons}
+
+    def _outlier(self, track, all_tracks):
+        if not track["available"] or len(all_tracks) < 3:
+            return {"label": "No outlier data", "score": 0, "severity": "none", "reasons": []}
+        reasons, score = [], 0
+        for key, label in (("energy", "energy"), ("bass", "bass"), ("rhythm", "rhythm"), ("brightness", "brightness")):
+            values = [item["features"].get(key) for item in all_tracks if isinstance(item["features"].get(key), (int, float))]
+            value = track["features"].get(key)
+            if not isinstance(value, (int, float)) or len(values) < 3:
+                continue
+            center = median(values); mad = median([abs(item - center) for item in values])
+            if mad > 1e-9 and abs(value - center) / (1.4826 * mad) > 3.5:
+                score += 1; reasons.append(f"unusual {label} for this playlist")
+        return {"label": "Playlist outlier" if score else "In playlist range", "score": score, "severity": "high" if score >= 2 else "medium", "reasons": reasons}
+
+    @staticmethod
+    def _compatible_keys(first, second):
+        if first == second:
+            return True
+        try:
+            first_number, first_mode = int(first[:-1]), first[-1]
+            second_number, second_mode = int(second[:-1]), second[-1]
+        except (ValueError, TypeError):
+            return False
+        return first_number == second_number or (first_mode == second_mode and (first_number - second_number) % 12 in {1, 11})
 
     @staticmethod
     def _range_label(selected, fingerprints, path):
