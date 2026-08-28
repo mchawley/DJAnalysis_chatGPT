@@ -32,12 +32,11 @@ class FingerprintSimilarityEngine:
         return self
 
     def nearest_neighbors(self, target, candidates, limit=10):
-        """Return the closest segments, excluding the target itself."""
+        """Return closest segments from other tracks only."""
         target_id = target.get("track_id")
-        target_segment = target.get("segment_index")
         matches = []
         for candidate in candidates:
-            if candidate.get("track_id") == target_id and candidate.get("segment_index") == target_segment:
+            if candidate.get("track_id") == target_id:
                 continue
             score = self.score(target["fingerprint"], candidate["fingerprint"])
             if score is not None:

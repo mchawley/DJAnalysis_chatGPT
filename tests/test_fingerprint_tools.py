@@ -18,5 +18,18 @@ class FingerprintToolsTest(unittest.TestCase):
         self.assertEqual(match.track_id, "b")
         self.assertTrue(match.reasons)
 
+    def test_excludes_all_segments_from_the_current_track(self):
+        engine = FingerprintSimilarityEngine()
+        target = {"track_id": "source", "segment_index": 0, "fingerprint": fingerprint()}
+        candidates = [
+            {"track_id": "source", "segment_index": 1, "fingerprint": fingerprint()},
+            {"track_id": "other", "segment_index": 0, "fingerprint": fingerprint(0.5)},
+        ]
+        engine.fit([target] + candidates)
+
+        matches = engine.nearest_neighbors(target, candidates)
+
+        self.assertEqual([match.track_id for match in matches], ["other"])
+
     def test_flags_missing_core_features(self):
         self.assertIn("energy.overall", FingerprintValidator().validate({}))
