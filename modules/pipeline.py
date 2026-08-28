@@ -35,7 +35,6 @@ class Pipeline:
         metadata_plugin = MetadataPlugin()
         energy_plugin = EnergyPlugin()
         fingerprint_plugin = FingerprintPlugin()
-        fingerprint_only = cfg.get("runMode") == "fingerprint_only"
         metadata_enabled = config.module_enabled("metadata")
         rekordbox_library_enabled = config.module_enabled(
             "rekordbox_library", cfg.get("rekordboxDatabaseLibrary", False)
@@ -48,9 +47,6 @@ class Pipeline:
         )
         energy_enabled = config.module_enabled("energy", cfg.get("energyEngine", False))
         fingerprint_enabled = config.module_enabled("fingerprint", cfg.get("fingerprintEngine", False))
-        if fingerprint_only:
-            metadata_enabled = rekordbox_library_enabled = rekordbox_analysis_enabled = energy_enabled = False
-            fingerprint_enabled = True
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
         log.info("Scanning music library...")
@@ -78,7 +74,7 @@ class Pipeline:
             for track_id, entry in previous_tracks.items()
         }
         log.info(f'Found {len(tracks)} tracks')
-        stages = ["fingerprint analysis"] if fingerprint_only else ["track documents"]
+        stages = ["track documents"]
         if metadata_enabled: stages.append("metadata")
         if rekordbox_library_enabled: stages.append("Rekordbox library metadata")
         log.info(f"Updating {' and '.join(stages)}...")
