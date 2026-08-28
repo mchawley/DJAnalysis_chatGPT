@@ -89,6 +89,18 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("node.addEventListener('dblclick',()=>chooseTrack", HTML)
         self.assertIn("function comparisonTimeline", HTML)
 
+    def test_pattern_summary_returns_one_dominant_four_beat_bar(self):
+        summary = InsightsHandler._pattern_summary([1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0])
+        self.assertEqual(summary["pattern"], [1, 0, 0, 1])
+        self.assertEqual(summary["bars"], 3)
+        self.assertEqual(summary["consistency"], 67)
+        self.assertFalse(InsightsHandler._pattern_summary([1, 0])["available"])
+
+    def test_html_renders_compact_beat_summary_not_raw_beat_strings(self):
+        self.assertIn("Dominant activity per four-beat bar", HTML)
+        self.assertIn("function beatSummary", HTML)
+        self.assertNotIn("function pattern(values)", HTML)
+
     def test_chart_summaries_describe_shapes(self):
         self.assertIn("builds", InsightsHandler._rms_summary([1, 1, 1, 2, 2, 2]))
         self.assertIn("eases", InsightsHandler._rms_summary([2, 2, 2, 1, 1, 1]))
