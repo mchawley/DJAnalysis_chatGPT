@@ -44,13 +44,13 @@ class EnergyFeatures:
 @dataclass
 class BassFeatures:
     overall: float = 0.0; sub: float = 0.0; kick: Optional[float] = None
-    consistency: float = 0.0; transient_strength: Optional[float] = None
+    consistency: float = 0.0; transient_strength: Optional[float] = None; kick_pattern: list[int] = field(default_factory=list)
 
 
 @dataclass
 class RhythmFeatures:
     density: Optional[float] = None; groove: Optional[float] = None; syncopation: Optional[float] = None
-    percussion_complexity: Optional[float] = None; beat_strength: Optional[float] = None
+    percussion_complexity: Optional[float] = None; beat_strength: Optional[float] = None; onset_pattern: list[int] = field(default_factory=list)
 
 
 @dataclass

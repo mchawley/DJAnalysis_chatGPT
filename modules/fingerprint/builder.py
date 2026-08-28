@@ -26,11 +26,13 @@ class FingerprintBuilder:
             spectral_rolloff=self._mean_feature("spectral_rolloff", segment), spectral_bandwidth=self._mean_feature("spectral_bandwidth", segment),
             spectral_flatness=self._mean_feature("spectral_flatness", segment))
         bass = self._bass(segment)
+        onset_pattern, kick_pattern = self._beat_patterns(segment)
+        bass.kick_pattern = kick_pattern
         onset = raw.onset_strength or [0.0]
         beat_strength = self._beat_strength(onset, raw.beat_positions)
         rhythm = RhythmFeatures(density=len(onset) / max(segment.duration, 1), groove=self._groove(onset),
             syncopation=self._syncopation(onset, raw.beat_positions), percussion_complexity=statistics.pstdev(onset) if len(onset) > 1 else 0.0,
-            beat_strength=beat_strength)
+            beat_strength=beat_strength, onset_pattern=onset_pattern)
         mode = "minor" if segment.key and segment.key.upper().endswith("A") else "major" if segment.key else None
         return Fingerprint(segment=segment.segment_type, start_time=segment.start_time, end_time=segment.end_time,
             duration=segment.duration, bars=segment.bars, phrases=segment.phrases,
@@ -57,6 +59,28 @@ class FingerprintBuilder:
         ratio = lambda low, high: float(power[(frequencies >= low) & (frequencies < high)].sum() / total) if total else 0.0
         low = ratio(20, 150); envelope = np.abs(y); transient = float(np.max(np.diff(envelope, prepend=envelope[0])))
         return BassFeatures(overall=ratio(0, 200), sub=ratio(20, 60), kick=low, consistency=1 - min(1, float(np.std(envelope) / (np.mean(envelope) + 1e-9))), transient_strength=transient)
+
+    def _beat_patterns(self, segment):
+        """Binary onset and low-frequency kick activity at Rekordbox beat positions."""
+        import numpy as np
+        beats = [beat for beat in self.beat_positions if segment.start_time <= beat < segment.end_time]
+        if not beats:
+            return [], []
+        onset_scores, kick_scores = [], []
+        for index, beat in enumerate(beats):
+            end = beats[index + 1] if index + 1 < len(beats) else min(segment.end_time, beat + .5)
+            audio = self.audio[round(beat * self.sample_rate):round(end * self.sample_rate)]
+            if len(audio) < 2:
+                onset_scores.append(0.0); kick_scores.append(0.0); continue
+            onset_scores.append(float(np.mean(np.abs(np.diff(audio)))))
+            power = np.abs(np.fft.rfft(audio)) ** 2
+            frequencies = np.fft.rfftfreq(len(audio), 1 / self.sample_rate)
+            total = power.sum()
+            kick_scores.append(float(power[(frequencies >= 20) & (frequencies < 150)].sum() / total) if total else 0.0)
+        def binary(scores):
+            threshold = float(np.median(scores))
+            return [int(score > threshold and score > 0) for score in scores]
+        return binary(onset_scores), binary(kick_scores)
 
     @staticmethod
     def _tempo_stability(beats):

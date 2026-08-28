@@ -31,5 +31,17 @@ class FingerprintToolsTest(unittest.TestCase):
 
         self.assertEqual([match.track_id for match in matches], ["other"])
 
+    def test_beat_patterns_require_beats_and_return_binary_values(self):
+        from modules.fingerprint.builder import FingerprintBuilder
+        from modules.fingerprint.models import Segment
+        import numpy as np
+
+        builder = FingerprintBuilder(np.array([0.0, 1.0, 0.0, .5, 0.0, 1.0]), 4, beat_positions=[0.0, .5, 1.0])
+        onset, kick = builder._beat_patterns(Segment("GROOVE", 0.0, 1.5))
+        self.assertEqual(len(onset), 3)
+        self.assertEqual(len(kick), 3)
+        self.assertTrue(all(value in (0, 1) for value in onset + kick))
+        self.assertEqual(FingerprintBuilder(np.array([0.0]), 4)._beat_patterns(Segment("GROOVE", 0.0, 1.0)), ([], []))
+
     def test_flags_missing_core_features(self):
         self.assertIn("energy.overall", FingerprintValidator().validate({}))
