@@ -46,8 +46,8 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertEqual(InsightsHandler._camelot("Dm"), "7A")
         self.assertEqual(InsightsHandler._camelot("C# major"), "3B")
         self.assertEqual(InsightsHandler._camelot("8a"), "8A")
-        envelope = InsightsHandler._envelope([{"start_time": 0, "end_time": 10, "energy": {"overall": .2}, "bass": {"overall": .3}, "rhythm": {"density": 2}}])
-        self.assertEqual(envelope, [{"start": 0, "end": 10, "energy": .2, "bass": .3, "rhythm": 2}])
+        envelope = InsightsHandler._envelope([{"start_time": 0, "end_time": 10, "energy": {"overall": .2}, "bass": {"overall": .3}}])
+        self.assertEqual(envelope, [{"start": 0, "end": 10, "energy": .2, "bass": .3}])
 
     def test_html_uses_block_meter_fills_and_bounded_charts(self):
         self.assertIn(".fill{display:block", HTML)
@@ -80,7 +80,7 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("No tracks match this search.", HTML)
         self.assertIn("search.addEventListener('focus',()=>showResults(true))", HTML)
         self.assertIn("padStart(2,'0')", HTML)
-        self.assertIn("● Rhythm", HTML)
+        self.assertNotIn("● Rhythm", HTML)
 
     def test_html_supports_preview_then_promote_similarity_workflow(self):
         self.assertIn('id="comparison"', HTML)

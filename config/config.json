@@ -3,6 +3,7 @@
     "/Users/manishchawley/Music"
   ],
   "outputRoot": "./output/tracks",
+  "runMode": "fingerprint_only",
   "rekordboxXmlPath": null,
   "analysisWorkers": 2,
   "modules": {
