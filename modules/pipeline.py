@@ -48,13 +48,17 @@ class Pipeline:
         )
         energy_enabled = config.module_enabled("energy", cfg.get("energyEngine", False))
         fingerprint_enabled = config.module_enabled("fingerprint", cfg.get("fingerprintEngine", False))
-        fingerprint_only = fingerprint_enabled and not any((
-            metadata_enabled, rekordbox_library_enabled, rekordbox_analysis_enabled, energy_enabled
+        document_only = not metadata_enabled
+        analysis_only = document_only and (energy_enabled or fingerprint_enabled) and not any((
+            rekordbox_library_enabled, rekordbox_analysis_enabled
         ))
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
-        log.info("Finding analyzed tracks..." if fingerprint_only else "Scanning music library...")
-        tracks = self._analyzed_tracks(jm) if fingerprint_only else scanner.scan()
+        log.info("Finding eligible track documents..." if document_only else "Scanning music library...")
+        tracks, known_track_ids = (
+            self._stored_tracks(jm, analyzed_only=analysis_only)
+            if document_only else (scanner.scan(), {})
+        )
         current_tracks = {}
         track_ids_by_path = {}
         tracks_by_path = {}
@@ -78,14 +82,14 @@ class Pipeline:
             for track_id, entry in previous_tracks.items()
         }
         log.info(f'Found {len(tracks)} tracks')
-        stages = ["fingerprint analysis"] if fingerprint_only else ["track documents"]
+        stages = ["stored track documents"] if document_only else ["track documents"]
         if metadata_enabled: stages.append("metadata")
         if rekordbox_library_enabled: stages.append("Rekordbox library metadata")
         log.info(f"Updating {' and '.join(stages)}...")
         with tqdm(tracks, desc="Processing tracks", unit="track") as progress:
             for t in progress:
                 progress.set_postfix_str(Path(t.path).name, refresh=False)
-                tid=Registry.content_hash(t.path)
+                tid = known_track_ids.get(self._normalise_path(t.path)) or Registry.content_hash(t.path)
                 if tid in current_tracks:
                     duplicates += 1
                     progress.write(
@@ -184,8 +188,8 @@ class Pipeline:
             fingerprint_updated, fingerprint_skipped, fingerprint_failed = self._process_fingerprints(tracks_by_path, track_ids_by_path, jm, fingerprint_plugin, cfg.get("analysisWorkers", 1))
             documents_updated += fingerprint_updated
 
-        deleted = set() if fingerprint_only else set(previous_tracks) - set(current_tracks) - replaced_track_ids
-        if not fingerprint_only and current_tracks != previous_tracks:
+        deleted = set() if document_only else set(previous_tracks) - set(current_tracks) - replaced_track_ids
+        if not document_only and current_tracks != previous_tracks:
             manifest_manager.save(current_tracks)
 
         log.info(f'Documents updated : {documents_updated}')
@@ -291,16 +295,19 @@ class Pipeline:
         updated = 0
         skipped = 0
         failed = 0
-        with tqdm(tracks_by_path.items(), desc="Calculating phrase energy", unit="track") as progress:
-            for path, track in progress:
+        eligible = []
+        for path, track in tracks_by_path.items():
+            document = json_manager.load(track_ids_by_path[path])
+            if plugin.needs_processing(document, track):
+                eligible.append((track, document, track_ids_by_path[path]))
+            else:
+                skipped += 1
+        with tqdm(eligible, desc="Calculating phrase energy", unit="track") as progress:
+            for track, document, track_id in progress:
                 progress.set_postfix_str(Path(track.path).name, refresh=False)
-                document = json_manager.load(track_ids_by_path[path])
-                if not plugin.needs_processing(document, track):
-                    skipped += 1
-                    continue
                 try:
                     plugin.process(document, track)
-                    json_manager.save(track_ids_by_path[path], document)
+                    json_manager.save(track_id, document)
                     updated += 1
                 except Exception as error:
                     failed += 1
@@ -352,20 +359,23 @@ class Pipeline:
         return updated, skipped, failed
 
     @staticmethod
-    def _analyzed_tracks(json_manager):
-        """Return only existing tracks eligible for fingerprint analysis."""
+    def _stored_tracks(json_manager, analyzed_only=False):
+        """Return stored tracks (optionally only those with Rekordbox phrase analysis)."""
         tracks = []
+        track_ids = {}
         for json_path in json_manager.output_directory.glob("*.json"):
             try:
                 document = json_manager.load(json_path.stem)
                 analysis = document.get("analysis", {})
                 source_path = document.get("system", {}).get("sourcePath")
-                if source_path and Path(source_path).is_file() and analysis.get("phrases") and analysis.get("beatPositions"):
+                eligible = not analyzed_only or (analysis.get("phrases") and analysis.get("beatPositions"))
+                if source_path and Path(source_path).is_file() and eligible:
                     source = Path(source_path)
                     tracks.append(Track(str(source), source.name, source.suffix.lower()))
+                    track_ids[Pipeline._normalise_path(source)] = document.get("system", {}).get("trackId", json_path.stem)
             except (OSError, ValueError):
                 continue
-        return sorted(tracks, key=lambda track: track.path)
+        return sorted(tracks, key=lambda track: track.path), track_ids
 
     @staticmethod
     def _normalise_path(path):
