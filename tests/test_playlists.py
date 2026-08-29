@@ -61,6 +61,17 @@ class PlaylistApiTest(unittest.TestCase):
         self.assertTrue(track["transition"]["reasons"])
         self.assertTrue(track["outlier"]["reasons"])
 
+    def test_camelot_plus_one_is_compatible(self):
+        self.assertTrue(InsightsHandler._compatible_keys("11A", "12A"))
+        self.assertTrue(InsightsHandler._compatible_keys("12A", "1A"))
+        self.assertTrue(InsightsHandler._compatible_keys("11A", "1A"))
+        self.assertFalse(InsightsHandler._compatible_keys("11A", "5A"))
+
+    def test_transition_compares_only_the_previous_track(self):
+        playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
+        tracks = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)["tracks"]
+        self.assertEqual(tracks[0]["transition"]["label"], "No transition data")
+
     def test_missing_document_remains_visible(self):
         playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
         PlaylistStore(self.output).update(playlist_id, track_ids=["one", "missing"])

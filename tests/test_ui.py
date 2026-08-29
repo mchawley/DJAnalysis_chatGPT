@@ -89,6 +89,13 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("node.addEventListener('dblclick',()=>chooseTrack", HTML)
         self.assertIn("function comparisonTimeline", HTML)
 
+    def test_playlist_ui_uses_separate_smoothed_charts_and_real_badge_labels(self):
+        from modules.playlist_ui import PLAYLIST_HTML
+        self.assertIn('id="charts" class="charts"', PLAYLIST_HTML)
+        self.assertIn("function smoothPath", PLAYLIST_HTML)
+        self.assertIn("raw_trends", Path("ui.py").read_text(encoding="utf-8"))
+        self.assertIn("`<span class=\"badge ok\">${esc(item.label)}</span>`", PLAYLIST_HTML)
+
     def test_pattern_summary_returns_one_dominant_four_beat_bar(self):
         summary = InsightsHandler._pattern_summary([1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0])
         self.assertEqual(summary["pattern"], [1, 0, 0, 1])

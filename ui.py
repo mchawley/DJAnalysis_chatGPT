@@ -148,6 +148,7 @@ class InsightsHandler(BaseHTTPRequestHandler):
             "id": playlist_id, "name": playlist["name"], "source": playlist.get("source", "custom"),
             "tracks": tracks,
             "trends": {key: self._normalize([track["features"].get(key) for track in tracks]) for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
+            "raw_trends": {key: [track["features"].get(key) for track in tracks] for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
         }
 
     def _playlist_track(self, track_id):
@@ -180,20 +181,20 @@ class InsightsHandler(BaseHTTPRequestHandler):
         return [(value - low) / (high - low) if isinstance(value, (int, float)) else 0.0 for value in values]
 
     def _transition(self, track, tracks, index):
-        neighbors = [item for item in (tracks[index - 1] if index else None, tracks[index + 1] if index + 1 < len(tracks) else None) if item and item["available"]]
-        if not track["available"] or not neighbors:
+        previous = tracks[index - 1] if index else None
+        if not track["available"] or not previous or not previous["available"]:
             return {"label": "No transition data", "score": 0, "severity": "none", "reasons": []}
         changes, reasons = [], []
         for key, label, threshold in (("energy", "energy", .12), ("bass", "bass", .18), ("rhythm", "rhythm", 20), ("brightness", "brightness", 900)):
             value = track["features"].get(key)
-            neighbor_values = [item["features"].get(key) for item in neighbors if isinstance(item["features"].get(key), (int, float))]
-            if isinstance(value, (int, float)) and neighbor_values and abs(value - sum(neighbor_values) / len(neighbor_values)) > threshold:
+            previous_value = previous["features"].get(key)
+            if isinstance(value, (int, float)) and isinstance(previous_value, (int, float)) and abs(value - previous_value) > threshold:
                 changes.append(1); reasons.append(f"abrupt {label} change")
         bpm = track.get("bpm")
-        neighbor_bpms = [item.get("bpm") for item in neighbors if isinstance(item.get("bpm"), (int, float))]
-        if isinstance(bpm, (int, float)) and neighbor_bpms and abs(bpm - sum(neighbor_bpms) / len(neighbor_bpms)) > 8:
+        previous_bpm = previous.get("bpm")
+        if isinstance(bpm, (int, float)) and isinstance(previous_bpm, (int, float)) and abs(bpm - previous_bpm) > 8:
             changes.append(1); reasons.append("large BPM jump")
-        if track.get("camelot") and any(item.get("camelot") and not self._compatible_keys(track["camelot"], item["camelot"]) for item in neighbors):
+        if track.get("camelot") and previous.get("camelot") and not self._compatible_keys(previous["camelot"], track["camelot"]):
             changes.append(1); reasons.append("key clash risk")
         score = len(changes)
         return {"label": "Transition break" if score else "Smooth transition", "score": score, "severity": "high" if score >= 3 else "medium", "reasons": reasons}
@@ -221,7 +222,10 @@ class InsightsHandler(BaseHTTPRequestHandler):
             second_number, second_mode = int(second[:-1]), second[-1]
         except (ValueError, TypeError):
             return False
-        return first_number == second_number or (first_mode == second_mode and (first_number - second_number) % 12 in {1, 11})
+        difference = (second_number - first_number) % 12
+        if first_mode == second_mode:
+            return difference in {0, 1, 2, 7, 11}
+        return difference in {0, 3, 11}
 
     @staticmethod
     def _range_label(selected, fingerprints, path):
