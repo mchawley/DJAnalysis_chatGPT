@@ -95,6 +95,9 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("function smoothPath", PLAYLIST_HTML)
         self.assertIn("raw_trends", Path("ui.py").read_text(encoding="utf-8"))
         self.assertIn("`<span class=\"badge ok\">${esc(item.label)}</span>`", PLAYLIST_HTML)
+        self.assertNotIn("Smoothed display; every track is retained", PLAYLIST_HTML)
+        self.assertIn('r="16" fill="transparent"', PLAYLIST_HTML)
+        self.assertIn('`${track.title||`Track ${index+1}`}: ${fmt(raw[index])}${units}`', PLAYLIST_HTML)
 
     def test_pattern_summary_returns_one_dominant_four_beat_bar(self):
         summary = InsightsHandler._pattern_summary([1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0])
