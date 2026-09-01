@@ -17,6 +17,15 @@ class PlaylistStoreTest(unittest.TestCase):
             self.assertEqual(store.source_playlists()[0]["trackIds"], ["one", "two"])
             self.assertEqual(store.restore(copy["id"])["trackIds"], ["one", "two"])
 
+    def test_first_source_reorder_maps_source_entry_ids_to_the_local_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = PlaylistStore(Path(directory) / "output" / "tracks")
+            store.save_sources([{"id": "rekordbox-0", "name": "Warmup", "source": "rekordbox", "trackIds": ["one", "two"]}])
+            source_entries = store.entries(store.source_playlists()[0])
+            copy = store.update("rekordbox-0", entry_ids=[source_entries[1]["id"], source_entries[0]["id"]])
+            self.assertEqual(copy["trackIds"], ["two", "one"])
+            self.assertEqual(store.source_playlists()[0]["trackIds"], ["one", "two"])
+
     def test_custom_playlist_preserves_selected_order(self):
         with tempfile.TemporaryDirectory() as directory:
             store = PlaylistStore(Path(directory) / "output" / "tracks")
