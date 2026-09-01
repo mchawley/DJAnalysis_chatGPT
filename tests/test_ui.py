@@ -94,6 +94,8 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('id="charts" class="charts"', PLAYLIST_HTML)
         self.assertIn("function smoothPath", PLAYLIST_HTML)
         self.assertIn("function featureGradient", PLAYLIST_HTML)
+        self.assertIn("function curveBias", PLAYLIST_HTML)
+        self.assertIn("length-.5)*12", PLAYLIST_HTML)
         self.assertIn("detail?.tracks?.[index]?.duration", PLAYLIST_HTML)
         self.assertIn("cyan = low · amber = medium · coral = high", PLAYLIST_HTML)
         self.assertIn("['energy','bass','rhythm','brightness'].includes(key)", PLAYLIST_HTML)
