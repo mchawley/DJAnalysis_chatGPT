@@ -93,10 +93,11 @@ class InsightsHandlerTest(unittest.TestCase):
         from modules.playlist_ui import PLAYLIST_HTML
         self.assertIn('id="charts" class="charts"', PLAYLIST_HTML)
         self.assertIn("function smoothPath", PLAYLIST_HTML)
-        self.assertIn("function energyGradient", PLAYLIST_HTML)
+        self.assertIn("function featureGradient", PLAYLIST_HTML)
         self.assertIn("detail?.tracks?.[index]?.duration", PLAYLIST_HTML)
         self.assertIn("cyan = low · amber = medium · coral = high", PLAYLIST_HTML)
-        self.assertIn('url(#playlist-energy-${index})', PLAYLIST_HTML)
+        self.assertIn("['energy','bass','rhythm','brightness'].includes(key)", PLAYLIST_HTML)
+        self.assertIn('url(#playlist-${key}-${index})', PLAYLIST_HTML)
         self.assertIn('stroke-width="6"', PLAYLIST_HTML)
         self.assertIn("raw_trends", Path("ui.py").read_text(encoding="utf-8"))
         self.assertIn("`<span class=\"badge ok\">${esc(item.label)}</span>`", PLAYLIST_HTML)

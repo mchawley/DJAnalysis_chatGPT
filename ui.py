@@ -169,9 +169,9 @@ class InsightsHandler(BaseHTTPRequestHandler):
             "tempo": doc.get("library", {}).get("bpm"),
         }
         segments = [self._segment_flow_item(item, index) for index, item in enumerate(fingerprints)]
-        normalized = self._normalize([item["energy"] for item in segments])
-        for item, energy in zip(segments, normalized):
-            item["normalized_energy"] = energy
+        for feature in ("energy", "bass", "rhythm", "brightness"):
+            for item, normalized in zip(segments, self._normalize([item["features"].get(feature) for item in segments])):
+                item[f"normalized_{feature}"] = normalized
         duration = max((item["end"] for item in segments if isinstance(item["end"], (int, float))), default=0)
         return {"id": track_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "duration": duration, "available": bool(fingerprints), "features": features, "segments": segments, "entry": segments[0]["features"] if segments else {}, "exit": segments[-1]["features"] if segments else {}}
 

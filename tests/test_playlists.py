@@ -57,6 +57,9 @@ class PlaylistApiTest(unittest.TestCase):
         self.assertEqual(len(detail["trends"]["energy"]), 3)
         self.assertEqual(detail["tracks"][0]["segments"][0]["type"], "CUSTOM")
         self.assertEqual(detail["tracks"][0]["segments"][0]["normalized_energy"], 0.5)
+        self.assertEqual(detail["tracks"][0]["segments"][0]["normalized_bass"], 0.5)
+        self.assertEqual(detail["tracks"][0]["segments"][0]["normalized_rhythm"], 0.5)
+        self.assertEqual(detail["tracks"][0]["segments"][0]["normalized_brightness"], 0.5)
         self.assertNotIn("transition_energy", detail["tracks"][0])
 
     def test_outlier_and_transition_have_explanations(self):
