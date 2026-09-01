@@ -141,28 +141,21 @@ class InsightsHandler(BaseHTTPRequestHandler):
             return {"id": playlist_id, "name": "Playlist not found", "tracks": [], "trends": {}}
         tracks = [self._playlist_track(track_id) for track_id in playlist.get("trackIds", [])]
         values = [track for track in tracks if track["available"]]
-        segments = [segment for track in tracks for segment in track.get("segments", [])]
-        for segment, energy in zip(segments, self._normalize([item.get("energy") for item in segments])):
-            segment["playlist_normalized_energy"] = energy
-        # The playlist chart and its detailed segment curve must share one
-        # reference scale.  An affine normalization has the useful property
-        # that a track's displayed segment average equals its playlist-energy
-        # point (when the track energy is the segment average).
         track_energy_values = [track["features"].get("energy") for track in tracks]
         valid_track_energies = [value for value in track_energy_values if isinstance(value, (int, float))]
         low = min(valid_track_energies, default=0.0)
         high = max(valid_track_energies, default=0.0)
         for track in tracks:
-            for segment in track.get("segments", []):
-                energy = segment.get("energy")
+            def transition_level(features):
+                energy = features.get("energy")
                 if not isinstance(energy, (int, float)):
-                    continue
+                    return None
                 normalized = .5 if high - low < 1e-9 else (energy - low) / (high - low)
-                # Whole-track averages define the shared visual scale.  A
-                # short segment can sit outside that range, so cap only its
-                # display position; its original energy remains in the API
-                # and chart tooltip.
-                segment["playlist_display_energy"] = min(1.0, max(0.0, normalized))
+                return min(1.0, max(0.0, normalized))
+            track["transition_energy"] = {
+                "entry": transition_level(track.get("entry", {})),
+                "exit": transition_level(track.get("exit", {})),
+            }
         for index, track in enumerate(tracks):
             track["transition"] = self._transition(track, tracks, index)
             track["outlier"] = self._outlier(track, values)
@@ -171,10 +164,6 @@ class InsightsHandler(BaseHTTPRequestHandler):
             "tracks": tracks,
             "trends": {key: self._normalize([track["features"].get(key) for track in tracks]) for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
             "raw_trends": {key: [track["features"].get(key) for track in tracks] for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
-            "segment_flow": [
-                {"track_id": track["id"], "title": track["title"], "segments": track.get("segments", [])}
-                for track in tracks
-            ],
         }
 
     def _playlist_track(self, track_id):
