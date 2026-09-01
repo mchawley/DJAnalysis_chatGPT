@@ -59,6 +59,21 @@ class PlaylistApiTest(unittest.TestCase):
         self.assertEqual(detail["segment_flow"][0]["segments"][0]["playlist_normalized_energy"], 0.0)
         self.assertEqual(detail["segment_flow"][2]["segments"][0]["playlist_normalized_energy"], 1.0)
 
+    def test_segment_curve_is_anchored_to_the_playlist_energy_trend(self):
+        playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
+        for track_id, energies in (("one", [.03, .17]), ("two", [.08, .16]), ("three", [.72, .98])):
+            path = self.output / f"{track_id}.json"
+            document = json.loads(path.read_text())
+            template = document["analysis"]["fingerprints"][0]
+            document["analysis"]["fingerprints"] = [
+                {**template, "energy": {"overall": energy}} for energy in energies
+            ]
+            path.write_text(json.dumps(document))
+        detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
+        for index, track in enumerate(detail["segment_flow"]):
+            displayed = [segment["playlist_display_energy"] for segment in track["segments"]]
+            self.assertAlmostEqual(sum(displayed) / len(displayed), detail["trends"]["energy"][index])
+
     def test_outlier_and_transition_have_explanations(self):
         playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
         track = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)["tracks"][2]

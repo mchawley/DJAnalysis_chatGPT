@@ -144,6 +144,20 @@ class InsightsHandler(BaseHTTPRequestHandler):
         segments = [segment for track in tracks for segment in track.get("segments", [])]
         for segment, energy in zip(segments, self._normalize([item.get("energy") for item in segments])):
             segment["playlist_normalized_energy"] = energy
+        # The playlist chart and its detailed segment curve must share one
+        # reference scale.  An affine normalization has the useful property
+        # that a track's displayed segment average equals its playlist-energy
+        # point (when the track energy is the segment average).
+        track_energy_values = [track["features"].get("energy") for track in tracks]
+        valid_track_energies = [value for value in track_energy_values if isinstance(value, (int, float))]
+        low = min(valid_track_energies, default=0.0)
+        high = max(valid_track_energies, default=0.0)
+        for track in tracks:
+            for segment in track.get("segments", []):
+                energy = segment.get("energy")
+                if not isinstance(energy, (int, float)):
+                    continue
+                segment["playlist_display_energy"] = .5 if high - low < 1e-9 else (energy - low) / (high - low)
         for index, track in enumerate(tracks):
             track["transition"] = self._transition(track, tracks, index)
             track["outlier"] = self._outlier(track, values)
