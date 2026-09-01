@@ -93,6 +93,9 @@ class InsightsHandlerTest(unittest.TestCase):
         from modules.playlist_ui import PLAYLIST_HTML
         self.assertIn('id="charts" class="charts"', PLAYLIST_HTML)
         self.assertIn("function smoothPath", PLAYLIST_HTML)
+        self.assertIn("function energyGradient", PLAYLIST_HTML)
+        self.assertIn("cyan = lower segment energy", PLAYLIST_HTML)
+        self.assertIn('url(#playlist-energy-${index})', PLAYLIST_HTML)
         self.assertIn("raw_trends", Path("ui.py").read_text(encoding="utf-8"))
         self.assertIn("`<span class=\"badge ok\">${esc(item.label)}</span>`", PLAYLIST_HTML)
         self.assertNotIn("Smoothed display; every track is retained", PLAYLIST_HTML)
