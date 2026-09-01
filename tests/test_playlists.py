@@ -55,23 +55,8 @@ class PlaylistApiTest(unittest.TestCase):
         self.assertEqual(detail["tracks"][2]["bpm"], 138)
         self.assertEqual(len(detail["trends"]["energy"]), 3)
         self.assertEqual(detail["tracks"][0]["segments"][0]["type"], "CUSTOM")
-        self.assertEqual(detail["tracks"][0]["transition_energy"]["entry"], 0.0)
-        self.assertEqual(detail["tracks"][2]["transition_energy"]["exit"], 1.0)
-        self.assertNotIn("segment_flow", detail)
-
-    def test_transition_energy_is_clamped_to_the_playlist_energy_range(self):
-        playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
-        path = self.output / "one.json"
-        document = json.loads(path.read_text())
-        template = document["analysis"]["fingerprints"][0]
-        document["analysis"]["fingerprints"] = [
-            {**template, "energy": {"overall": -.5}},
-            {**template, "energy": {"overall": 2.0}},
-        ]
-        path.write_text(json.dumps(document))
-        detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
-        self.assertEqual(detail["tracks"][0]["transition_energy"]["entry"], 0.0)
-        self.assertEqual(detail["tracks"][0]["transition_energy"]["exit"], 1.0)
+        self.assertEqual(detail["tracks"][0]["segments"][0]["normalized_energy"], 0.5)
+        self.assertNotIn("transition_energy", detail["tracks"][0])
 
     def test_outlier_and_transition_have_explanations(self):
         playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]

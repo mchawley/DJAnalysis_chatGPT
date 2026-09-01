@@ -99,12 +99,12 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('r="16" fill="transparent"', PLAYLIST_HTML)
         self.assertIn('`${track.title||`Track ${index+1}`}: ${fmt(raw[index])}${units}`', PLAYLIST_HTML)
 
-    def test_playlist_ui_uses_transition_markers_and_colored_segment_bars(self):
+    def test_playlist_ui_uses_phase_a_colored_segment_strips_without_global_flow(self):
         from modules.playlist_ui import PLAYLIST_HTML
-        self.assertIn("transition_energy", PLAYLIST_HTML)
-        self.assertIn("function segmentBars", PLAYLIST_HTML)
-        self.assertIn('class="segment-bar', PLAYLIST_HTML)
-        self.assertIn("segment-bar.low", PLAYLIST_HTML)
+        self.assertIn("function segmentStrip", PLAYLIST_HTML)
+        self.assertIn('class="segment-strip"', PLAYLIST_HTML)
+        self.assertIn('data-energy="${level}"', PLAYLIST_HTML)
+        self.assertIn('.segment[data-energy="low"]', PLAYLIST_HTML)
         self.assertNotIn('id="toggle-flow"', PLAYLIST_HTML)
         self.assertNotIn("function playlistSegmentCurve", PLAYLIST_HTML)
         self.assertIn("segment_index=${node.dataset.segment}", PLAYLIST_HTML)

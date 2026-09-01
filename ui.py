@@ -141,21 +141,6 @@ class InsightsHandler(BaseHTTPRequestHandler):
             return {"id": playlist_id, "name": "Playlist not found", "tracks": [], "trends": {}}
         tracks = [self._playlist_track(track_id) for track_id in playlist.get("trackIds", [])]
         values = [track for track in tracks if track["available"]]
-        track_energy_values = [track["features"].get("energy") for track in tracks]
-        valid_track_energies = [value for value in track_energy_values if isinstance(value, (int, float))]
-        low = min(valid_track_energies, default=0.0)
-        high = max(valid_track_energies, default=0.0)
-        for track in tracks:
-            def transition_level(features):
-                energy = features.get("energy")
-                if not isinstance(energy, (int, float)):
-                    return None
-                normalized = .5 if high - low < 1e-9 else (energy - low) / (high - low)
-                return min(1.0, max(0.0, normalized))
-            track["transition_energy"] = {
-                "entry": transition_level(track.get("entry", {})),
-                "exit": transition_level(track.get("exit", {})),
-            }
         for index, track in enumerate(tracks):
             track["transition"] = self._transition(track, tracks, index)
             track["outlier"] = self._outlier(track, values)
