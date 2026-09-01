@@ -121,6 +121,10 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertNotIn("function playlistSegmentCurve", PLAYLIST_HTML)
         self.assertIn("segment_index:segmentIndex", PLAYLIST_HTML)
 
+    def test_playlist_update_endpoint_accepts_stable_entry_order(self):
+        server = Path("ui.py").read_text(encoding="utf-8")
+        self.assertIn('payload.get("entry_ids")', server)
+
     def test_pattern_summary_returns_one_dominant_four_beat_bar(self):
         summary = InsightsHandler._pattern_summary([1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0])
         self.assertEqual(summary["pattern"], [1, 0, 0, 1])

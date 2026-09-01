@@ -103,7 +103,10 @@ class InsightsHandler(BaseHTTPRequestHandler):
         if action == "create":
             return self._json(store.create(payload.get("name", ""), payload.get("track_ids", [])))
         if action == "update":
-            return self._json(store.update(payload.get("playlist_id", ""), payload.get("name"), payload.get("track_ids")) or {})
+            return self._json(store.update(
+                payload.get("playlist_id", ""), payload.get("name"), payload.get("track_ids"),
+                payload.get("entry_ids"),
+            ) or {})
         if action == "restore":
             return self._json(store.restore(payload.get("playlist_id", "")) or {})
         if action == "set_segment_included":
