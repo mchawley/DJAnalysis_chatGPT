@@ -102,7 +102,8 @@ class InsightsHandlerTest(unittest.TestCase):
     def test_playlist_ui_includes_interactive_segment_energy_flow(self):
         from modules.playlist_ui import PLAYLIST_HTML
         self.assertIn('id="toggle-flow"', PLAYLIST_HTML)
-        self.assertIn("function segmentStrip", PLAYLIST_HTML)
+        self.assertIn("function segmentCurve", PLAYLIST_HTML)
+        self.assertIn('class="segment-point"', PLAYLIST_HTML)
         self.assertIn("segment_index=${node.dataset.segment}", PLAYLIST_HTML)
 
     def test_pattern_summary_returns_one_dominant_four_beat_bar(self):
