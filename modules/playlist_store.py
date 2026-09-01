@@ -19,7 +19,9 @@ class PlaylistStore:
         return self._read(self.local_path).get("playlists", [])
 
     def all_playlists(self):
-        return self.source_playlists() + self.local_playlists()
+        local = self.local_playlists()
+        edited_sources = {item.get("sourceId") for item in local if item.get("source") == "rekordbox-copy"}
+        return [item for item in self.source_playlists() if item.get("id") not in edited_sources] + local
 
     def save_sources(self, playlists):
         self._write(self.source_path, {"playlists": playlists})

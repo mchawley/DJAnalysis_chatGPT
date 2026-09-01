@@ -117,6 +117,8 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('.segment.excluded', PLAYLIST_HTML)
         self.assertIn("set_segment_included", PLAYLIST_HTML)
         self.assertIn("restore_segments", PLAYLIST_HTML)
+        self.assertIn("crateiq-playlist-id", PLAYLIST_HTML)
+        self.assertIn("Local edits", PLAYLIST_HTML)
         self.assertNotIn('id="toggle-flow"', PLAYLIST_HTML)
         self.assertNotIn("function playlistSegmentCurve", PLAYLIST_HTML)
         self.assertIn("segment_index:segmentIndex", PLAYLIST_HTML)

@@ -41,6 +41,7 @@ class PlaylistStoreTest(unittest.TestCase):
             self.assertEqual(copy["source"], "rekordbox-copy")
             self.assertEqual(store.source_playlists()[0].get("segmentExclusions"), None)
             self.assertEqual(list(copy["segmentExclusions"].values()), [[2]])
+            self.assertEqual([item["id"] for item in store.all_playlists()], [copy["id"]])
 
     def test_segment_exclusions_follow_duplicate_entries_through_reorder(self):
         with tempfile.TemporaryDirectory() as directory:
