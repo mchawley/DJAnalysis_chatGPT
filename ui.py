@@ -157,7 +157,12 @@ class InsightsHandler(BaseHTTPRequestHandler):
                 energy = segment.get("energy")
                 if not isinstance(energy, (int, float)):
                     continue
-                segment["playlist_display_energy"] = .5 if high - low < 1e-9 else (energy - low) / (high - low)
+                normalized = .5 if high - low < 1e-9 else (energy - low) / (high - low)
+                # Whole-track averages define the shared visual scale.  A
+                # short segment can sit outside that range, so cap only its
+                # display position; its original energy remains in the API
+                # and chart tooltip.
+                segment["playlist_display_energy"] = min(1.0, max(0.0, normalized))
         for index, track in enumerate(tracks):
             track["transition"] = self._transition(track, tracks, index)
             track["outlier"] = self._outlier(track, values)

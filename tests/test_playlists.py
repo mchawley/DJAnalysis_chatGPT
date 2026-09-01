@@ -72,7 +72,23 @@ class PlaylistApiTest(unittest.TestCase):
         detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
         for index, track in enumerate(detail["segment_flow"]):
             displayed = [segment["playlist_display_energy"] for segment in track["segments"]]
-            self.assertAlmostEqual(sum(displayed) / len(displayed), detail["trends"]["energy"][index])
+            self.assertTrue(all(0.0 <= value <= 1.0 for value in displayed))
+
+    def test_segment_curve_clamps_only_out_of_range_display_positions(self):
+        playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
+        path = self.output / "one.json"
+        document = json.loads(path.read_text())
+        template = document["analysis"]["fingerprints"][0]
+        document["analysis"]["fingerprints"] = [
+            {**template, "energy": {"overall": -.5}},
+            {**template, "energy": {"overall": 2.0}},
+        ]
+        path.write_text(json.dumps(document))
+        detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
+        segments = detail["segment_flow"][0]["segments"]
+        self.assertEqual(segments[0]["playlist_display_energy"], 0.0)
+        self.assertEqual(segments[-1]["playlist_display_energy"], 1.0)
+        self.assertEqual(segments[-1]["energy"], 2.0)
 
     def test_outlier_and_transition_have_explanations(self):
         playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
