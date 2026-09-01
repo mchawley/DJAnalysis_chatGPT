@@ -40,11 +40,11 @@ class PlaylistApiTest(unittest.TestCase):
         InsightsHandler.output_root = self.original
         self.directory.cleanup()
 
-    def _document(self, track_id, title, bpm, key, energy, bass, rhythm, brightness):
+    def _document(self, track_id, title, bpm, key, energy, bass, rhythm, brightness, duration=240):
         document = {
             "system": {"trackId": track_id}, "metadata": {"title": title, "artist": "DJ"},
             "library": {"bpm": bpm, "key": key},
-            "analysis": {"fingerprints": [{"energy": {"overall": energy}, "bass": {"overall": bass}, "rhythm": {"density": rhythm}, "spectrum": {"spectral_centroid": brightness}}]},
+            "analysis": {"fingerprints": [{"end_time": duration, "energy": {"overall": energy}, "bass": {"overall": bass}, "rhythm": {"density": rhythm}, "spectrum": {"spectral_centroid": brightness}}]},
         }
         (self.output / f"{track_id}.json").write_text(json.dumps(document))
 
@@ -53,6 +53,7 @@ class PlaylistApiTest(unittest.TestCase):
         detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
         self.assertEqual([track["id"] for track in detail["tracks"]], ["one", "two", "three"])
         self.assertEqual(detail["tracks"][2]["bpm"], 138)
+        self.assertEqual(detail["tracks"][0]["duration"], 240)
         self.assertEqual(len(detail["trends"]["energy"]), 3)
         self.assertEqual(detail["tracks"][0]["segments"][0]["type"], "CUSTOM")
         self.assertEqual(detail["tracks"][0]["segments"][0]["normalized_energy"], 0.5)

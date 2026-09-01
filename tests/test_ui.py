@@ -94,6 +94,7 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('id="charts" class="charts"', PLAYLIST_HTML)
         self.assertIn("function smoothPath", PLAYLIST_HTML)
         self.assertIn("function energyGradient", PLAYLIST_HTML)
+        self.assertIn("detail?.tracks?.[index]?.duration", PLAYLIST_HTML)
         self.assertIn("cyan = low · amber = medium · coral = high", PLAYLIST_HTML)
         self.assertIn('url(#playlist-energy-${index})', PLAYLIST_HTML)
         self.assertIn('stroke-width="6"', PLAYLIST_HTML)

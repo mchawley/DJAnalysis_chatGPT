@@ -155,7 +155,7 @@ class InsightsHandler(BaseHTTPRequestHandler):
         path = self.output_root / f"{track_id}.json"
         catalog = next((item for item in self._catalog() if item["id"] == track_id), {"title": track_id, "artist": ""})
         if not path.exists():
-            return {"id": track_id, **catalog, "bpm": None, "key": None, "camelot": None, "available": False, "features": {}}
+            return {"id": track_id, **catalog, "bpm": None, "key": None, "camelot": None, "duration": 0, "available": False, "features": {}}
         doc = json.loads(path.read_text())
         fingerprints = doc.get("analysis", {}).get("fingerprints", [])
         def average(path_name):
@@ -172,7 +172,8 @@ class InsightsHandler(BaseHTTPRequestHandler):
         normalized = self._normalize([item["energy"] for item in segments])
         for item, energy in zip(segments, normalized):
             item["normalized_energy"] = energy
-        return {"id": track_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "available": bool(fingerprints), "features": features, "segments": segments, "entry": segments[0]["features"] if segments else {}, "exit": segments[-1]["features"] if segments else {}}
+        duration = max((item["end"] for item in segments if isinstance(item["end"], (int, float))), default=0)
+        return {"id": track_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "duration": duration, "available": bool(fingerprints), "features": features, "segments": segments, "entry": segments[0]["features"] if segments else {}, "exit": segments[-1]["features"] if segments else {}}
 
     def _segment_flow_item(self, fingerprint, index):
         return {
