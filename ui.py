@@ -22,7 +22,7 @@ function showResults(showAll=false){let list=matches(showAll);resultIndex=-1;res
 function hideResults(){results.hidden=true;search.setAttribute('aria-expanded','false');resultIndex=-1}
 function chooseTrack(item,segment=0){if(!item)return;comparison=null;currentTrack=item.id;selected=segment;search.value=label(item);hideResults();load()}
 search.addEventListener('focus',()=>showResults(true));search.addEventListener('input',()=>showResults());search.addEventListener('keydown',event=>{let items=results._items||matches();if(event.key==='Escape'){hideResults();return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(!items.length)return;resultIndex=(resultIndex+(event.key==='ArrowDown'?1:items.length-1))%items.length;results.querySelectorAll('.track-option').forEach((node,index)=>node.classList.toggle('active',index===resultIndex));return}if(event.key==='Enter'){event.preventDefault();chooseTrack(items[resultIndex<0?0:resultIndex])}});results.addEventListener('mousedown',event=>{let button=event.target.closest('.track-option');if(button)chooseTrack((results._items||[])[Number(button.dataset.index)])});document.addEventListener('mousedown',event=>{if(!event.target.closest('.picker'))hideResults()});
-fetch('/api/tracks').then(response=>response.json()).then(items=>{tracks=items;let requested=new URLSearchParams(location.search).get('track_id');currentTrack=tracks.find(item=>item.id===requested)?.id||tracks[0]?.id||'';let current=tracks.find(item=>item.id===currentTrack);search.value=current?label(current):'';if(currentTrack)load()});fetch('/api/summary').then(response=>response.json()).then(data=>$('summary').textContent=`${data.tracks} analyzed tracks · select a section to compare`);
+fetch('/api/tracks').then(response=>response.json()).then(items=>{tracks=items;let query=new URLSearchParams(location.search),requested=query.get('track_id');currentTrack=tracks.find(item=>item.id===requested)?.id||tracks[0]?.id||'';selected=Number(query.get('segment_index')||0);let current=tracks.find(item=>item.id===currentTrack);search.value=current?label(current):'';if(currentTrack)load()});fetch('/api/summary').then(response=>response.json()).then(data=>$('summary').textContent=`${data.tracks} analyzed tracks · select a section to compare`);
 function meter(labelName,item,key){let value=item.features[key],meter=item.meters[key]||{percent:0,tone:'neutral',track:{state:'—',tone:'neutral'},absolute:{state:'—',tone:'neutral'}};return `<div class="row"><span>${labelName}</span><span class="bar"><span class="fill ${meter.tone}" style="width:${meter.percent}%"></span></span><b>${fmt(value?.value)}</b><span class="references"><span class="reference ${meter.track.tone}">Track: ${meter.track.state}</span><span class="reference ${meter.absolute.tone}">Absolute: ${meter.absolute.state}</span></span></div>`}
 function chart(values,color){let width=400,height=150,max=Math.max(...values,1),last=Math.max(values.length-1,1),points=values.map((value,index)=>`${index*width/last},${height-value/max*(height-10)-5}`).join(' ');return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"><polyline fill="none" stroke="${color}" stroke-width="3" points="${points}"/></svg>`}
 function chartPanel(labelName,values,color,meaning,summary){return `<div class="chart-card"><p class="muted">${labelName}</p><div class="chart">${chart(values,color)}</div><p class="muted chart-note"><b>${escape(summary)}</b><br>${meaning}</p></div>`}
@@ -149,6 +149,10 @@ class InsightsHandler(BaseHTTPRequestHandler):
             "tracks": tracks,
             "trends": {key: self._normalize([track["features"].get(key) for track in tracks]) for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
             "raw_trends": {key: [track["features"].get(key) for track in tracks] for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
+            "segment_flow": [
+                {"track_id": track["id"], "title": track["title"], "segments": track.get("segments", [])}
+                for track in tracks
+            ],
         }
 
     def _playlist_track(self, track_id):
@@ -168,7 +172,21 @@ class InsightsHandler(BaseHTTPRequestHandler):
             "rhythm": average("rhythm.density"), "brightness": average("spectrum.spectral_centroid"),
             "tempo": doc.get("library", {}).get("bpm"),
         }
-        return {"id": track_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "available": bool(fingerprints), "features": features}
+        segments = [self._segment_flow_item(item, index) for index, item in enumerate(fingerprints)]
+        normalized = self._normalize([item["energy"] for item in segments])
+        for item, energy in zip(segments, normalized):
+            item["normalized_energy"] = energy
+        return {"id": track_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "available": bool(fingerprints), "features": features, "segments": segments, "entry": segments[0]["features"] if segments else {}, "exit": segments[-1]["features"] if segments else {}}
+
+    def _segment_flow_item(self, fingerprint, index):
+        return {
+            "index": index, "type": fingerprint.get("segment", "CUSTOM"),
+            "start": fingerprint.get("start_time", 0), "end": fingerprint.get("end_time", 0),
+            "energy": self._value(fingerprint, "energy.overall"),
+            "features": {name: self._value(fingerprint, path) for name, path in {
+                "energy": "energy.overall", "bass": "bass.overall", "rhythm": "rhythm.density", "brightness": "spectrum.spectral_centroid",
+            }.items()},
+        }
 
     @staticmethod
     def _normalize(values):

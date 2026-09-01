@@ -54,6 +54,8 @@ class PlaylistApiTest(unittest.TestCase):
         self.assertEqual([track["id"] for track in detail["tracks"]], ["one", "two", "three"])
         self.assertEqual(detail["tracks"][2]["bpm"], 138)
         self.assertEqual(len(detail["trends"]["energy"]), 3)
+        self.assertEqual(detail["tracks"][0]["segments"][0]["type"], "CUSTOM")
+        self.assertEqual(detail["segment_flow"][0]["track_id"], "one")
 
     def test_outlier_and_transition_have_explanations(self):
         playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]

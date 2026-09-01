@@ -99,6 +99,12 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('r="16" fill="transparent"', PLAYLIST_HTML)
         self.assertIn('`${track.title||`Track ${index+1}`}: ${fmt(raw[index])}${units}`', PLAYLIST_HTML)
 
+    def test_playlist_ui_includes_interactive_segment_energy_flow(self):
+        from modules.playlist_ui import PLAYLIST_HTML
+        self.assertIn('id="toggle-flow"', PLAYLIST_HTML)
+        self.assertIn("function segmentStrip", PLAYLIST_HTML)
+        self.assertIn("segment_index=${node.dataset.segment}", PLAYLIST_HTML)
+
     def test_pattern_summary_returns_one_dominant_four_beat_bar(self):
         summary = InsightsHandler._pattern_summary([1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0])
         self.assertEqual(summary["pattern"], [1, 0, 0, 1])
