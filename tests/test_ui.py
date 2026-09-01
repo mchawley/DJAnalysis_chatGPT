@@ -96,7 +96,7 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("function featureGradient", PLAYLIST_HTML)
         self.assertIn("function curveBias", PLAYLIST_HTML)
         self.assertIn("length-.5)*12", PLAYLIST_HTML)
-        self.assertIn("detail?.tracks?.[index]?.duration", PLAYLIST_HTML)
+        self.assertIn("tracks[index]?.duration", PLAYLIST_HTML)
         self.assertIn("cyan = low · amber = medium · coral = high", PLAYLIST_HTML)
         self.assertIn("['energy','bass','rhythm','brightness'].includes(key)", PLAYLIST_HTML)
         self.assertIn('url(#playlist-${key}-${index})', PLAYLIST_HTML)
@@ -109,13 +109,17 @@ class InsightsHandlerTest(unittest.TestCase):
 
     def test_playlist_ui_uses_phase_a_colored_segment_strips_without_global_flow(self):
         from modules.playlist_ui import PLAYLIST_HTML
-        self.assertIn("function segmentStrip", PLAYLIST_HTML)
-        self.assertIn('class="segment-strip"', PLAYLIST_HTML)
-        self.assertIn('data-energy="${level}"', PLAYLIST_HTML)
+        self.assertIn("function referenceStrip", PLAYLIST_HTML)
+        self.assertIn("function playableStrip", PLAYLIST_HTML)
+        self.assertIn('class="segment-strip reference"', PLAYLIST_HTML)
+        self.assertIn('data-energy="${segmentLevel(segment)}"', PLAYLIST_HTML)
         self.assertIn('.segment[data-energy="low"]', PLAYLIST_HTML)
+        self.assertIn('.segment.excluded', PLAYLIST_HTML)
+        self.assertIn("set_segment_included", PLAYLIST_HTML)
+        self.assertIn("restore_segments", PLAYLIST_HTML)
         self.assertNotIn('id="toggle-flow"', PLAYLIST_HTML)
         self.assertNotIn("function playlistSegmentCurve", PLAYLIST_HTML)
-        self.assertIn("segment_index=${node.dataset.segment}", PLAYLIST_HTML)
+        self.assertIn("segment_index:segmentIndex", PLAYLIST_HTML)
 
     def test_pattern_summary_returns_one_dominant_four_beat_bar(self):
         summary = InsightsHandler._pattern_summary([1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0])

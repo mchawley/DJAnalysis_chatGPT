@@ -106,6 +106,13 @@ class InsightsHandler(BaseHTTPRequestHandler):
             return self._json(store.update(payload.get("playlist_id", ""), payload.get("name"), payload.get("track_ids")) or {})
         if action == "restore":
             return self._json(store.restore(payload.get("playlist_id", "")) or {})
+        if action == "set_segment_included":
+            return self._json(store.set_segment_included(
+                payload.get("playlist_id", ""), payload.get("entry_id", ""),
+                payload.get("segment_index"), bool(payload.get("included")),
+            ) or {})
+        if action == "restore_segments":
+            return self._json(store.restore_segments(payload.get("playlist_id", ""), payload.get("entry_id", "")) or {})
         if action == "delete":
             return self._json({"deleted": store.delete(payload.get("playlist_id", ""))})
         return self._json({"error": "Unknown playlist action"})
@@ -139,41 +146,57 @@ class InsightsHandler(BaseHTTPRequestHandler):
         playlist = next((item for item in PlaylistStore(self.output_root).all_playlists() if item["id"] == playlist_id), None)
         if playlist is None:
             return {"id": playlist_id, "name": "Playlist not found", "tracks": [], "trends": {}}
-        tracks = [self._playlist_track(track_id) for track_id in playlist.get("trackIds", [])]
-        values = [track for track in tracks if track["available"]]
-        for index, track in enumerate(tracks):
-            track["transition"] = self._transition(track, tracks, index)
-            track["outlier"] = self._outlier(track, values)
+        store = PlaylistStore(self.output_root)
+        exclusions = playlist.get("segmentExclusions", {})
+        tracks = [self._playlist_track(entry["trackId"], entry["id"], exclusions.get(entry["id"], [])) for entry in store.entries(playlist)]
+        playable = [track for track in tracks if track["playable"]]
+        previous = None
+        for track in tracks:
+            if not track["playable"]:
+                track["transition"] = {"label": "Skipped", "score": 0, "severity": "none", "reasons": []}
+                track["outlier"] = {"label": "Skipped", "score": 0, "severity": "none", "reasons": []}
+                continue
+            track["transition"] = self._transition(track, previous)
+            track["outlier"] = self._outlier(track, playable)
+            previous = track
         return {
             "id": playlist_id, "name": playlist["name"], "source": playlist.get("source", "custom"),
             "tracks": tracks,
-            "trends": {key: self._normalize([track["features"].get(key) for track in tracks]) for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
-            "raw_trends": {key: [track["features"].get(key) for track in tracks] for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
+            "chartTracks": playable,
+            "trends": {key: self._normalize([track["features"].get(key) for track in playable]) for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
+            "raw_trends": {key: [track["features"].get(key) for track in playable] for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
         }
 
-    def _playlist_track(self, track_id):
+    def _playlist_track(self, track_id, entry_id, excluded_indexes=()):
         path = self.output_root / f"{track_id}.json"
         catalog = next((item for item in self._catalog() if item["id"] == track_id), {"title": track_id, "artist": ""})
         if not path.exists():
-            return {"id": track_id, **catalog, "bpm": None, "key": None, "camelot": None, "duration": 0, "available": False, "features": {}}
+            return {"id": track_id, "entryId": entry_id, **catalog, "bpm": None, "key": None, "camelot": None, "duration": 0, "available": False, "playable": False, "features": {}, "segments": [], "originalSegments": []}
         doc = json.loads(path.read_text())
         fingerprints = doc.get("analysis", {}).get("fingerprints", [])
-        def average(path_name):
-            values = [self._value(item, path_name) for item in fingerprints]
-            values = [value for value in values if isinstance(value, (int, float))]
-            return sum(values) / len(values) if values else None
         key = doc.get("library", {}).get("key")
-        features = {
-            "energy": average("energy.overall"), "bass": average("bass.overall"),
-            "rhythm": average("rhythm.density"), "brightness": average("spectrum.spectral_centroid"),
-            "tempo": doc.get("library", {}).get("bpm"),
-        }
-        segments = [self._segment_flow_item(item, index) for index, item in enumerate(fingerprints)]
+        excluded = {int(index) for index in excluded_indexes}
+        original_segments = [self._segment_flow_item(item, index) for index, item in enumerate(fingerprints)]
         for feature in ("energy", "bass", "rhythm", "brightness"):
-            for item, normalized in zip(segments, self._normalize([item["features"].get(feature) for item in segments])):
+            for item, normalized in zip(original_segments, self._normalize([item["features"].get(feature) for item in original_segments])):
                 item[f"normalized_{feature}"] = normalized
-        duration = max((item["end"] for item in segments if isinstance(item["end"], (int, float))), default=0)
-        return {"id": track_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "duration": duration, "available": bool(fingerprints), "features": features, "segments": segments, "entry": segments[0]["features"] if segments else {}, "exit": segments[-1]["features"] if segments else {}}
+        for segment in original_segments:
+            segment["included"] = segment["index"] not in excluded
+        segments = [segment for segment in original_segments if segment["included"]]
+        def weighted(feature):
+            values = [(segment["features"].get(feature), self._segment_duration(segment)) for segment in segments]
+            values = [(value, duration) for value, duration in values if isinstance(value, (int, float))]
+            total = sum(duration for _, duration in values)
+            return sum(value * duration for value, duration in values) / total if total else None
+        features = {feature: weighted(feature) for feature in ("energy", "bass", "rhythm", "brightness")}
+        features["tempo"] = doc.get("library", {}).get("bpm")
+        duration = sum(self._segment_duration(segment) for segment in segments)
+        return {"id": track_id, "entryId": entry_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "duration": duration, "available": bool(fingerprints), "playable": bool(segments), "features": features, "segments": segments, "originalSegments": original_segments, "entry": segments[0]["features"] if segments else {}, "exit": segments[-1]["features"] if segments else {}}
+
+    @staticmethod
+    def _segment_duration(segment):
+        start, end = segment.get("start"), segment.get("end")
+        return max(0.0, end - start) if isinstance(start, (int, float)) and isinstance(end, (int, float)) else 0.0
 
     def _segment_flow_item(self, fingerprint, index):
         return {
@@ -195,9 +218,8 @@ class InsightsHandler(BaseHTTPRequestHandler):
             return [.5 if isinstance(value, (int, float)) else 0.0 for value in values]
         return [(value - low) / (high - low) if isinstance(value, (int, float)) else 0.0 for value in values]
 
-    def _transition(self, track, tracks, index):
-        previous = tracks[index - 1] if index else None
-        if not track["available"] or not previous or not previous["available"]:
+    def _transition(self, track, previous):
+        if not track["playable"] or not previous or not previous["playable"]:
             return {"label": "No transition data", "score": 0, "severity": "none", "reasons": []}
         changes, reasons = [], []
         for key, label, threshold in (("energy", "energy", .12), ("bass", "bass", .18), ("rhythm", "rhythm", 20), ("brightness", "brightness", 900)):
@@ -215,7 +237,7 @@ class InsightsHandler(BaseHTTPRequestHandler):
         return {"label": "Transition break" if score else "Smooth transition", "score": score, "severity": "high" if score >= 3 else "medium", "reasons": reasons}
 
     def _outlier(self, track, all_tracks):
-        if not track["available"] or len(all_tracks) < 3:
+        if not track["playable"] or len(all_tracks) < 3:
             return {"label": "No outlier data", "score": 0, "severity": "none", "reasons": []}
         reasons, score = [], 0
         for key, label in (("energy", "energy"), ("bass", "bass"), ("rhythm", "rhythm"), ("brightness", "brightness")):

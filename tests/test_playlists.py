@@ -23,6 +23,25 @@ class PlaylistStoreTest(unittest.TestCase):
             playlist = store.create("Set", ["third", "first", "second"])
             self.assertEqual(playlist["trackIds"], ["third", "first", "second"])
 
+    def test_segment_edit_creates_a_local_copy_and_translates_source_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = PlaylistStore(Path(directory) / "output" / "tracks")
+            store.save_sources([{"id": "rekordbox-0", "name": "Warmup", "source": "rekordbox", "trackIds": ["one", "two"]}])
+            source_entry = store.entries(store.source_playlists()[0])[0]["id"]
+            copy = store.set_segment_included("rekordbox-0", source_entry, 2, False)
+            self.assertEqual(copy["source"], "rekordbox-copy")
+            self.assertEqual(store.source_playlists()[0].get("segmentExclusions"), None)
+            self.assertEqual(list(copy["segmentExclusions"].values()), [[2]])
+
+    def test_segment_exclusions_follow_duplicate_entries_through_reorder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = PlaylistStore(Path(directory) / "output" / "tracks")
+            playlist = store.create("Set", ["one", "one"])
+            first, second = [entry["id"] for entry in playlist["entries"]]
+            store.set_segment_included(playlist["id"], first, 1, False)
+            reordered = store.update(playlist["id"], entry_ids=[second, first])
+            self.assertEqual(reordered["segmentExclusions"][first], [1])
+
 
 class PlaylistApiTest(unittest.TestCase):
     def setUp(self):
@@ -84,3 +103,25 @@ class PlaylistApiTest(unittest.TestCase):
         PlaylistStore(self.output).update(playlist_id, track_ids=["one", "missing"])
         detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
         self.assertFalse(detail["tracks"][1]["available"])
+
+    def test_selected_segments_drive_duration_weighted_features_and_skip_state(self):
+        document = json.loads((self.output / "one.json").read_text())
+        document["analysis"]["fingerprints"] = [
+            {"start_time": 0, "end_time": 10, "energy": {"overall": .1}, "bass": {"overall": .2}, "rhythm": {"density": 10}, "spectrum": {"spectral_centroid": 1000}},
+            {"start_time": 10, "end_time": 30, "energy": {"overall": .7}, "bass": {"overall": .8}, "rhythm": {"density": 30}, "spectrum": {"spectral_centroid": 3000}},
+        ]
+        (self.output / "one.json").write_text(json.dumps(document))
+        store = PlaylistStore(self.output)
+        playlist_id = store.local_playlists()[0]["id"]
+        entry_id = store.entries(store.local_playlists()[0])[0]["id"]
+        store.set_segment_included(playlist_id, entry_id, 0, False)
+        detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
+        track = detail["tracks"][0]
+        self.assertEqual(track["duration"], 20)
+        self.assertAlmostEqual(track["features"]["energy"], .7)
+        self.assertFalse(track["originalSegments"][0]["included"])
+        self.assertTrue(track["originalSegments"][1]["included"])
+        store.set_segment_included(playlist_id, entry_id, 1, False)
+        detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
+        self.assertFalse(detail["tracks"][0]["playable"])
+        self.assertNotIn("one", [track["id"] for track in detail["chartTracks"]])
