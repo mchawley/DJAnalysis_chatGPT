@@ -141,6 +141,9 @@ class InsightsHandler(BaseHTTPRequestHandler):
             return {"id": playlist_id, "name": "Playlist not found", "tracks": [], "trends": {}}
         tracks = [self._playlist_track(track_id) for track_id in playlist.get("trackIds", [])]
         values = [track for track in tracks if track["available"]]
+        segments = [segment for track in tracks for segment in track.get("segments", [])]
+        for segment, energy in zip(segments, self._normalize([item.get("energy") for item in segments])):
+            segment["playlist_normalized_energy"] = energy
         for index, track in enumerate(tracks):
             track["transition"] = self._transition(track, tracks, index)
             track["outlier"] = self._outlier(track, values)

@@ -103,6 +103,9 @@ class InsightsHandlerTest(unittest.TestCase):
         from modules.playlist_ui import PLAYLIST_HTML
         self.assertIn('id="toggle-flow"', PLAYLIST_HTML)
         self.assertIn("function segmentCurve", PLAYLIST_HTML)
+        self.assertIn("function playlistSegmentCurve", PLAYLIST_HTML)
+        self.assertIn("playlist_normalized_energy", PLAYLIST_HTML)
+        self.assertIn("Dashed lines mark a new track", PLAYLIST_HTML)
         self.assertIn('class="segment-point"', PLAYLIST_HTML)
         self.assertIn("segment_index=${node.dataset.segment}", PLAYLIST_HTML)
 

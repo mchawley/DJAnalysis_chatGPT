@@ -56,6 +56,8 @@ class PlaylistApiTest(unittest.TestCase):
         self.assertEqual(len(detail["trends"]["energy"]), 3)
         self.assertEqual(detail["tracks"][0]["segments"][0]["type"], "CUSTOM")
         self.assertEqual(detail["segment_flow"][0]["track_id"], "one")
+        self.assertEqual(detail["segment_flow"][0]["segments"][0]["playlist_normalized_energy"], 0.0)
+        self.assertEqual(detail["segment_flow"][2]["segments"][0]["playlist_normalized_energy"], 1.0)
 
     def test_outlier_and_transition_have_explanations(self):
         playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
