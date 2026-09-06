@@ -162,6 +162,8 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("function startPreview", HTML)
         self.assertIn("continuePreview=previewActive&&previewTrackId===currentTrack", HTML)
         self.assertIn("segment-controls", HTML)
+        self.assertIn("Exclude selected segment", HTML)
+        self.assertIn("Restore all segments", HTML)
 
     def test_byte_ranges_support_browser_seeking(self):
         self.assertEqual(InsightsHandler._byte_range(None, 100), (0, 99))
