@@ -174,7 +174,7 @@ class InsightsHandler(BaseHTTPRequestHandler):
         path = self.output_root / f"{track_id}.json"
         catalog = next((item for item in self._catalog() if item["id"] == track_id), {"title": track_id, "artist": ""})
         if not path.exists():
-            return {"id": track_id, "entryId": entry_id, **catalog, "bpm": None, "key": None, "camelot": None, "duration": 0, "available": False, "playable": False, "features": {}, "segments": [], "originalSegments": []}
+            return {"id": track_id, "entryId": entry_id, **catalog, "bpm": None, "key": None, "camelot": None, "duration": 0, "trackDuration": 0, "available": False, "playable": False, "features": {}, "segments": [], "originalSegments": []}
         doc = json.loads(path.read_text())
         fingerprints = doc.get("analysis", {}).get("fingerprints", [])
         key = doc.get("library", {}).get("key")
@@ -194,7 +194,8 @@ class InsightsHandler(BaseHTTPRequestHandler):
         features = {feature: weighted(feature) for feature in ("energy", "bass", "rhythm", "brightness")}
         features["tempo"] = doc.get("library", {}).get("bpm")
         duration = sum(self._segment_duration(segment) for segment in segments)
-        return {"id": track_id, "entryId": entry_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "duration": duration, "available": bool(fingerprints), "playable": bool(segments), "features": features, "segments": segments, "originalSegments": original_segments, "entry": segments[0]["features"] if segments else {}, "exit": segments[-1]["features"] if segments else {}}
+        track_duration = max((segment["end"] for segment in original_segments if isinstance(segment["end"], (int, float))), default=0)
+        return {"id": track_id, "entryId": entry_id, "title": doc.get("metadata", {}).get("title") or catalog["title"], "artist": doc.get("metadata", {}).get("artist") or catalog["artist"], "bpm": features["tempo"], "key": key, "camelot": self._camelot(key), "duration": duration, "trackDuration": track_duration, "available": bool(fingerprints), "playable": bool(segments), "features": features, "segments": segments, "originalSegments": original_segments, "entry": segments[0]["features"] if segments else {}, "exit": segments[-1]["features"] if segments else {}}
 
     @staticmethod
     def _segment_duration(segment):
