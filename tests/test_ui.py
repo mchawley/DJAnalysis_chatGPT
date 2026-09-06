@@ -154,6 +154,19 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("function beatSummary", HTML)
         self.assertNotIn("function pattern(values)", HTML)
 
+    def test_audio_preview_uses_segment_controls_and_local_audio_route(self):
+        self.assertIn('id="play-preview"', HTML)
+        self.assertIn('id="loop-preview"', HTML)
+        self.assertIn("/api/audio?track_id=", HTML)
+        self.assertIn("function stopPreview", HTML)
+
+    def test_byte_ranges_support_browser_seeking(self):
+        self.assertEqual(InsightsHandler._byte_range(None, 100), (0, 99))
+        self.assertEqual(InsightsHandler._byte_range("bytes=10-19", 100), (10, 19))
+        self.assertEqual(InsightsHandler._byte_range("bytes=90-", 100), (90, 99))
+        self.assertEqual(InsightsHandler._byte_range("bytes=-10", 100), (90, 99))
+        self.assertEqual(InsightsHandler._byte_range("bytes=100-", 100), (None, None))
+
     def test_chart_summaries_describe_shapes(self):
         self.assertIn("builds", InsightsHandler._rms_summary([1, 1, 1, 2, 2, 2]))
         self.assertIn("eases", InsightsHandler._rms_summary([2, 2, 2, 1, 1, 1]))

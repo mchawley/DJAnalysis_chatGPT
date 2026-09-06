@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import mimetypes
 from statistics import median
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,6 +25,11 @@ function showResults(showAll=false){let list=matches(showAll);resultIndex=-1;res
 function hideResults(){results.hidden=true;search.setAttribute('aria-expanded','false');resultIndex=-1}
 function chooseTrack(item,segment=0){if(!item)return;comparison=null;currentTrack=item.id;selected=segment;search.value=label(item);hideResults();load()}
 search.addEventListener('focus',()=>showResults(true));search.addEventListener('input',()=>showResults());search.addEventListener('keydown',event=>{let items=results._items||matches();if(event.key==='Escape'){hideResults();return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(!items.length)return;resultIndex=(resultIndex+(event.key==='ArrowDown'?1:items.length-1))%items.length;results.querySelectorAll('.track-option').forEach((node,index)=>node.classList.toggle('active',index===resultIndex));return}if(event.key==='Enter'){event.preventDefault();chooseTrack(items[resultIndex<0?0:resultIndex])}});results.addEventListener('mousedown',event=>{let button=event.target.closest('.track-option');if(button)chooseTrack((results._items||[])[Number(button.dataset.index)])});document.addEventListener('mousedown',event=>{if(!event.target.closest('.picker'))hideResults()});
+let previewAudio=null,previewActions=null;
+function stopPreview(message='Preview stopped.'){if(previewAudio){previewAudio.pause();previewAudio.src='';previewAudio=null}let status=document.querySelector('#preview-status');if(status)status.textContent=message}
+function timingFromDeck(){let stat=[...document.querySelectorAll('#deck .stats div')].find(node=>node.querySelector('span')?.textContent==='Timing');let match=stat?.querySelector('b')?.textContent.match(/(\d+):(\d+)–(\d+):(\d+)/);return match?{start:Number(match[1])*60+Number(match[2]),end:Number(match[3])*60+Number(match[4])}:null}
+function installPreviewControls(){let actions=document.querySelector('#deck .segment-actions');if(!actions||actions===previewActions)return;previewActions=actions;stopPreview('');actions.insertAdjacentHTML('beforeend','<button id="play-preview">Play segment</button><button id="stop-preview" class="secondary">Stop</button><label class="muted"><input id="loop-preview" type="checkbox"> Loop</label><span id="preview-status" class="muted">Preview is off.</span>');$('play-preview').addEventListener('click',()=>{let timing=timingFromDeck();if(!timing)return;stopPreview('Loading preview…');let audio=new Audio(`/api/audio?track_id=${encodeURIComponent(currentTrack)}`);previewAudio=audio;audio.addEventListener('canplay',()=>{if(audio!==previewAudio)return;audio.currentTime=timing.start;audio.play().then(()=>{$('preview-status').textContent=`Playing ${time(timing.start)}–${time(timing.end)}.`}).catch(()=>{$('preview-status').textContent='This audio format cannot be played by this browser.'})},{once:true});audio.addEventListener('timeupdate',()=>{if(audio.currentTime>=timing.end){if($('loop-preview')?.checked){audio.currentTime=timing.start;audio.play()}else stopPreview('Segment preview complete.')}});audio.addEventListener('error',()=>{if(audio===previewAudio)stopPreview('Original audio is unavailable or unsupported in this browser.')})});$('stop-preview').addEventListener('click',()=>stopPreview())}
+new MutationObserver(installPreviewControls).observe($('deck'),{childList:true,subtree:true});
 fetch('/api/tracks').then(response=>response.json()).then(items=>{tracks=items;let query=new URLSearchParams(location.search),requested=query.get('track_id');currentTrack=tracks.find(item=>item.id===requested)?.id||tracks[0]?.id||'';selected=Number(query.get('segment_index')||0);let current=tracks.find(item=>item.id===currentTrack);search.value=current?label(current):'';if(currentTrack)load()});fetch('/api/summary').then(response=>response.json()).then(data=>$('summary').textContent=`${data.tracks} analyzed tracks · select a section to compare`);
 function meter(labelName,item,key){let value=item.features[key],meter=item.meters[key]||{percent:0,tone:'neutral',track:{state:'—',tone:'neutral'},absolute:{state:'—',tone:'neutral'}};return `<div class="row"><span>${labelName}</span><span class="bar"><span class="fill ${meter.tone}" style="width:${meter.percent}%"></span></span><b>${fmt(value?.value)}</b><span class="references"><span class="reference ${meter.track.tone}">Track: ${meter.track.state}</span><span class="reference ${meter.absolute.tone}">Absolute: ${meter.absolute.state}</span></span></div>`}
 function chart(values,color){let width=400,height=150,max=Math.max(...values,1),last=Math.max(values.length-1,1),points=values.map((value,index)=>`${index*width/last},${height-value/max*(height-10)-5}`).join(' ');return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"><polyline fill="none" stroke="${color}" stroke-width="3" points="${points}"/></svg>`}
@@ -53,6 +59,9 @@ class InsightsHandler(BaseHTTPRequestHandler):
             return self._json({"tracks": len(self._catalog())})
         if request.path == "/api/tracks":
             return self._json(self._catalog())
+        if request.path == "/api/audio":
+            track_id = parse_qs(request.query).get("track_id", [""])[0]
+            return self._audio(track_id)
         if request.path == "/api/playlists":
             return self._json(self._playlist_catalog())
         if request.path == "/api/playlist":
@@ -427,6 +436,67 @@ class InsightsHandler(BaseHTTPRequestHandler):
 
     def _json(self, value):
         self._send(json.dumps(value), "application/json")
+
+    def _audio(self, track_id):
+        """Stream an original library file with byte ranges for browser seeking."""
+        if not track_id or Path(track_id).name != track_id:
+            self.send_error(404)
+            return
+        document_path = self.output_root / f"{track_id}.json"
+        if not document_path.exists():
+            self.send_error(404)
+            return
+        try:
+            source_path = json.loads(document_path.read_text()).get("system", {}).get("sourcePath")
+            audio_path = Path(source_path) if source_path else None
+        except (OSError, json.JSONDecodeError):
+            audio_path = None
+        if not audio_path or not audio_path.is_file():
+            self.send_error(404, "Original audio file is unavailable")
+            return
+        size = audio_path.stat().st_size
+        start, end = self._byte_range(self.headers.get("Range"), size)
+        if start is None:
+            self.send_error(416, "Invalid byte range")
+            return
+        content_type = mimetypes.guess_type(audio_path.name)[0] or "application/octet-stream"
+        self.send_response(206 if self.headers.get("Range") else 200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(end - start + 1))
+        if self.headers.get("Range"):
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        remaining = end - start + 1
+        with audio_path.open("rb") as audio:
+            audio.seek(start)
+            while remaining:
+                chunk = audio.read(min(64 * 1024, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
+
+    @staticmethod
+    def _byte_range(header, size):
+        if size <= 0:
+            return None, None
+        if not header:
+            return 0, size - 1
+        if not header.startswith("bytes=") or "," in header:
+            return None, None
+        try:
+            start_text, end_text = header[6:].split("-", 1)
+            if not start_text:
+                length = int(end_text)
+                return max(0, size - length), size - 1
+            start = int(start_text)
+            end = int(end_text) if end_text else size - 1
+        except ValueError:
+            return None, None
+        if start < 0 or start >= size or end < start:
+            return None, None
+        return start, min(end, size - 1)
 
     def _send(self, content, content_type):
         encoded = content.encode()
