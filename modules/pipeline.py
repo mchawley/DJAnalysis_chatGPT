@@ -341,6 +341,8 @@ class Pipeline:
     @staticmethod
     def _process_fingerprints(tracks_by_path, track_ids_by_path, json_manager, plugin, workers):
         from modules.fingerprint.plugin import build_fingerprints
+        from modules.fingerprint.storage import FingerprintCompactor
+        compactor = FingerprintCompactor(json_manager.output_directory)
         updated = skipped = failed = 0
         eligible = []
         for path, track in tracks_by_path.items():
@@ -354,7 +356,8 @@ class Pipeline:
                 for _path, track, document, track_id in progress:
                     try:
                         document["analysis"]["fingerprints"] = build_fingerprints(track.path, document["analysis"], document.get("library", {}))
-                        plugin.mark_complete(document); json_manager.save(track_id, document); updated += 1
+                        plugin.mark_complete(document); json_manager.save(track_id, document)
+                        compactor.compact_path(json_manager.get_json_path(track_id)); updated += 1
                     except Exception as error:
                         failed += 1; progress.write(f"[ERROR] Fingerprint failed for {track.path}: {type(error).__name__}: {error}")
             return updated, skipped, failed
@@ -372,7 +375,8 @@ class Pipeline:
                 for future in done:
                     track, document, track_id = pending.pop(future)
                     try:
-                        document["analysis"]["fingerprints"] = future.result(); plugin.mark_complete(document); json_manager.save(track_id, document); updated += 1
+                        document["analysis"]["fingerprints"] = future.result(); plugin.mark_complete(document); json_manager.save(track_id, document)
+                        compactor.compact_path(json_manager.get_json_path(track_id)); updated += 1
                     except Exception as error:
                         failed += 1; progress.write(f"[ERROR] Fingerprint failed for {track.path}: {type(error).__name__}: {error}")
                     progress.update(1)

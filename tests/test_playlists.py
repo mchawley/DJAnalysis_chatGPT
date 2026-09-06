@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from modules.playlist_store import PlaylistStore
+from modules.segment_store import SegmentSelectionStore
 from ui import InsightsHandler
 
 
@@ -51,6 +52,27 @@ class PlaylistStoreTest(unittest.TestCase):
             store.set_segment_included(playlist["id"], first, 1, False)
             reordered = store.update(playlist["id"], entry_ids=[second, first])
             self.assertEqual(reordered["segmentExclusions"][first], [1])
+
+    def test_legacy_playlist_exclusions_migrate_once_to_global_track_choices(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output" / "tracks"
+            store = PlaylistStore(output)
+            playlist = store.create("Set", ["one"])
+            entry_id = playlist["entries"][0]["id"]
+            store.set_segment_included(playlist["id"], entry_id, 2, False)
+            selections = SegmentSelectionStore(output)
+            self.assertEqual(selections.excluded("one"), {2})
+            self.assertEqual(PlaylistStore(output).local_playlists()[0]["segmentExclusions"], {})
+            self.assertEqual(SegmentSelectionStore(output).excluded("one"), {2})
+
+    def test_global_choice_does_not_create_a_playlist_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output" / "tracks"
+            store = PlaylistStore(output)
+            store.save_sources([{"id": "rekordbox-0", "name": "Set", "source": "rekordbox", "trackIds": ["one"]}])
+            SegmentSelectionStore(output).set_included("one", 0, False)
+            self.assertEqual(store.local_playlists(), [])
+            self.assertEqual(SegmentSelectionStore(output).excluded("one"), {0})
 
 
 class PlaylistApiTest(unittest.TestCase):
@@ -125,14 +147,23 @@ class PlaylistApiTest(unittest.TestCase):
         store = PlaylistStore(self.output)
         playlist_id = store.local_playlists()[0]["id"]
         entry_id = store.entries(store.local_playlists()[0])[0]["id"]
-        store.set_segment_included(playlist_id, entry_id, 0, False)
+        SegmentSelectionStore(self.output).set_included("one", 0, False)
         detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
         track = detail["tracks"][0]
         self.assertEqual(track["duration"], 20)
         self.assertAlmostEqual(track["features"]["energy"], .7)
         self.assertFalse(track["originalSegments"][0]["included"])
         self.assertTrue(track["originalSegments"][1]["included"])
-        store.set_segment_included(playlist_id, entry_id, 1, False)
+        SegmentSelectionStore(self.output).set_included("one", 1, False)
         detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
         self.assertFalse(detail["tracks"][0]["playable"])
         self.assertNotIn("one", [track["id"] for track in detail["chartTracks"]])
+
+    def test_global_selection_affects_every_playlist_occurrence(self):
+        playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
+        PlaylistStore(self.output).update(playlist_id, track_ids=["one", "one", "two"])
+        SegmentSelectionStore(self.output).set_included("one", 0, False)
+        detail = InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)
+        self.assertFalse(detail["tracks"][0]["playable"])
+        self.assertFalse(detail["tracks"][1]["playable"])
+        self.assertTrue(detail["tracks"][2]["playable"])

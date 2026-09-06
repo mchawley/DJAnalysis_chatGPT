@@ -1,4 +1,5 @@
 from statistics import median
+from .storage import temporal_values
 
 
 class FingerprintNormalizer:
@@ -28,8 +29,7 @@ class FingerprintNormalizer:
         return max(-3.0, min(3.0, (float(value) - stats["median"]) / stats["iqr"]))
 
     def temporal(self, fingerprint):
-        raw = fingerprint.get("raw_features", {})
-        return [value for field in self.TEMPORAL_FIELDS for value in self._resample(raw.get(field, []))]
+        return [value for field in self.TEMPORAL_FIELDS for value in self._resample(temporal_values(fingerprint, field))]
 
     def to_dict(self):
         return {"version": self.VERSION, "bins": self.bins, "profile": self.profile}

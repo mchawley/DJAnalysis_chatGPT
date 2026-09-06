@@ -56,6 +56,13 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn(".waveform{position:relative;height:80px", HTML)
         self.assertIn("Track: ${meter.track.state}", HTML)
 
+    def test_track_ui_supports_global_segment_selection(self):
+        self.assertIn("part.excluded", HTML)
+        self.assertIn('id="toggle-segment"', HTML)
+        self.assertIn('id="restore-track-segments"', HTML)
+        self.assertIn("function setGlobalSegment", HTML)
+        self.assertIn("/api/segments", HTML)
+
     def test_catalog_returns_manifest_title_and_artist_with_fallback(self):
         with tempfile.TemporaryDirectory() as directory:
             output_root = Path(directory) / "output" / "tracks"
@@ -115,8 +122,9 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('data-energy="${segmentLevel(segment)}"', PLAYLIST_HTML)
         self.assertIn('.segment[data-energy="low"]', PLAYLIST_HTML)
         self.assertIn('.segment.excluded', PLAYLIST_HTML)
-        self.assertIn("set_segment_included", PLAYLIST_HTML)
-        self.assertIn("restore_segments", PLAYLIST_HTML)
+        self.assertIn("set_included", PLAYLIST_HTML)
+        self.assertIn("Restore all segments", PLAYLIST_HTML)
+        self.assertIn("data-track", PLAYLIST_HTML)
         self.assertIn("crateiq-playlist-id", PLAYLIST_HTML)
         self.assertIn("Local edits", PLAYLIST_HTML)
         self.assertIn("grid-template-columns:1fr", PLAYLIST_HTML)
