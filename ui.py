@@ -476,7 +476,11 @@ class InsightsHandler(BaseHTTPRequestHandler):
                 chunk = audio.read(min(64 * 1024, remaining))
                 if not chunk:
                     break
-                self.wfile.write(chunk)
+                try:
+                    self.wfile.write(chunk)
+                except (BrokenPipeError, ConnectionResetError):
+                    # A browser cancels this range request when a preview stops or seeks.
+                    return
                 remaining -= len(chunk)
 
     @staticmethod
