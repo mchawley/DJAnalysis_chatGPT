@@ -159,6 +159,9 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('id="loop-preview"', HTML)
         self.assertIn("/api/audio?track_id=", HTML)
         self.assertIn("function stopPreview", HTML)
+        self.assertIn("function startPreview", HTML)
+        self.assertIn("continuePreview=previewActive&&previewTrackId===currentTrack", HTML)
+        self.assertIn("segment-controls", HTML)
 
     def test_byte_ranges_support_browser_seeking(self):
         self.assertEqual(InsightsHandler._byte_range(None, 100), (0, 99))
