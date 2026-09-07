@@ -154,6 +154,14 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn("function beatSummary", HTML)
         self.assertNotIn("function pattern(values)", HTML)
 
+    def test_server_exposes_home_setup_and_analysis_surfaces(self):
+        source = Path("ui.py").read_text(encoding="utf-8")
+        self.assertIn('request.path == "/setup"', source)
+        self.assertIn('request.path == "/analysis"', source)
+        self.assertIn('request.path == "/api/analysis/status"', source)
+        self.assertIn('request_path == "/api/analysis/start"', source)
+        self.assertIn('request_path.startswith("/api/setup/")', source)
+
     def test_audio_preview_uses_segment_controls_and_local_audio_route(self):
         self.assertIn('id="play-preview"', HTML)
         self.assertIn('id="loop-preview"', HTML)

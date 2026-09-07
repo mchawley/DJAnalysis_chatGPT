@@ -1,0 +1,14 @@
+{
+  "musicRoots": [],
+  "outputRoot": "./output/tracks",
+  "rekordboxXmlPath": null,
+  "analysisWorkers": 2,
+  "modules": {
+    "metadata": true,
+    "rekordbox_library": true,
+    "rekordbox_analysis": true,
+    "energy": true,
+    "fingerprint": true
+  },
+  "supportedFormats": [".mp3", ".flac", ".wav", ".aiff", ".m4a"]
+}

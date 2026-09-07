@@ -13,6 +13,9 @@ from modules.fingerprint.storage import display_values
 from modules.playlist_store import PlaylistStore
 from modules.playlist_ui import PLAYLIST_HTML
 from modules.segment_store import SegmentSelectionStore
+from modules.setup_service import SetupService
+from modules.analysis_job import AnalysisJob
+from modules.onboarding_ui import HOME_HTML, SETUP_HTML, ANALYSIS_HTML
 
 
 HTML = r"""<!doctype html>
@@ -50,15 +53,27 @@ function similar(){let box=$('matches');box.innerHTML='<p class="muted">Comparin
 class InsightsHandler(BaseHTTPRequestHandler):
     output_root = Path("output/tracks")
     similarity_cache = None
+    analysis_job = AnalysisJob()
 
     def do_GET(self):
         request = urlparse(self.path)
-        if request.path == "/":
+        if request.path == "/" and "track_id" not in parse_qs(request.query):
+            return self._send(HOME_HTML, "text/html")
+        if request.path in {"/tracks", "/"}:
             return self._send(HTML, "text/html")
+        if request.path == "/setup":
+            return self._send(SETUP_HTML, "text/html")
+        if request.path == "/analysis":
+            return self._send(ANALYSIS_HTML, "text/html")
         if request.path == "/playlists":
             return self._send(PLAYLIST_HTML, "text/html")
         if request.path == "/api/summary":
             return self._json({"tracks": len(self._catalog())})
+        if request.path == "/api/setup":
+            config = SetupService().current()
+            return self._json({"configured": bool(config.get("musicRoots")), "config": config})
+        if request.path == "/api/analysis/status":
+            return self._json(self.analysis_job.status())
         if request.path == "/api/tracks":
             return self._json(self._catalog())
         if request.path == "/api/audio":
@@ -107,6 +122,35 @@ class InsightsHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request_path = urlparse(self.path).path
+        if request_path.startswith("/api/setup/"):
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(size) or b"{}")
+            except (ValueError, OSError):
+                return self._json({"valid": False, "errors": ["Invalid setup request."]})
+            service = SetupService()
+            result = service.save(payload) if request_path.endswith("/save") else service.validate(payload)
+            if request_path.endswith("/save") and result.get("valid"):
+                type(self).output_root = Path(result["config"]["outputRoot"])
+                type(self).similarity_cache = None
+            return self._json(result)
+        if request_path == "/api/analysis/start":
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(size) or b"{}")
+            except (ValueError, OSError):
+                return self._json({"error": "Invalid analysis request."})
+            config = SetupService().current()
+            if not config.get("musicRoots"):
+                return self._json({"error": "Complete Setup before starting analysis."})
+            result = self.analysis_job.start(config, payload.get("modules", {}))
+            if result is None:
+                return self._json({"error": "Analysis is already running."})
+            type(self).output_root = Path(config["outputRoot"])
+            type(self).similarity_cache = None
+            return self._json(result)
+        if request_path == "/api/analysis/stop":
+            return self._json(self.analysis_job.stop())
         if request_path == "/api/segments":
             try:
                 size = int(self.headers.get("Content-Length", "0"))

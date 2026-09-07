@@ -26,10 +26,27 @@ class Pipeline:
     REKORDBOX_LIBRARY_VERSION = "3.0"
     REKORDBOX_ANALYSIS_VERSION = "5.0"
 
+    def __init__(self, config_data=None, event_callback=None, cancel_event=None):
+        self.config_data = config_data
+        self.event_callback = event_callback
+        self.cancel_event = cancel_event
+
+    def _event(self, stage, message):
+        if self.event_callback:
+            self.event_callback(stage, message)
+
+    def _cancelled(self):
+        return bool(self.cancel_event and self.cancel_event.is_set())
+
+    def _stopped_result(self, tracks):
+        self._event("stopped", "Analysis stopped at a safe stage boundary.")
+        return {"status": "stopped", "tracks": len(tracks)}
+
     def run(self):
-        config=Config()
+        config=Config(data=self.config_data) if self.config_data is not None else Config()
+        config.require_configured()
         cfg=config.data
-        log=Logger()
+        log=Logger(self._event)
         music_roots = cfg.get("musicRoots") or [cfg["musicRoot"]]
         scanner=Scanner(music_roots,cfg['supportedFormats'])
         jm=JsonManager(cfg['outputRoot'])
@@ -56,6 +73,7 @@ class Pipeline:
         ))
         analysis_importer = RekordboxAnalysisImporter()
         previous_tracks = manifest_manager.load()['tracks']
+        self._event("scan", "Finding eligible track documents..." if document_only else "Scanning music library...")
         log.info("Finding eligible track documents..." if document_only else "Scanning music library...")
         tracks, known_track_ids = (
             self._stored_tracks(jm, analyzed_only=analysis_only)
@@ -84,12 +102,16 @@ class Pipeline:
             for track_id, entry in previous_tracks.items()
         }
         log.info(f'Found {len(tracks)} tracks')
+        self._event("documents", f"Processing {len(tracks)} tracks...")
         stages = ["stored track documents"] if document_only else ["track documents"]
         if metadata_enabled: stages.append("metadata")
         if rekordbox_library_enabled: stages.append("Rekordbox library metadata")
         log.info(f"Updating {' and '.join(stages)}...")
         with tqdm(tracks, desc="Processing tracks", unit="track") as progress:
             for t in progress:
+                if self._cancelled():
+                    self._event("stopped", "Stopping after the current safe checkpoint.")
+                    return {"status": "stopped", "tracks": len(current_tracks)}
                 progress.set_postfix_str(Path(t.path).name, refresh=False)
                 tid = known_track_ids.get(self._normalise_path(t.path)) or Registry.content_hash(t.path)
                 if tid in current_tracks:
@@ -187,6 +209,9 @@ class Pipeline:
             PlaylistStore(cfg["outputRoot"]).save_sources(sources)
 
         if rekordbox_analysis_enabled:
+            if self._cancelled():
+                return self._stopped_result(current_tracks)
+            self._event("rekordbox", "Importing Rekordbox analysis...")
             imported, skipped = self._import_rekordbox_analyses(
                 track_ids_by_path, jm, analysis_importer, log
             )
@@ -195,6 +220,9 @@ class Pipeline:
             documents_updated += imported
 
         if energy_enabled:
+            if self._cancelled():
+                return self._stopped_result(current_tracks)
+            self._event("energy", "Calculating phrase energy...")
             updated, skipped, failed = self._process_energy(
                 tracks_by_path, track_ids_by_path, jm, energy_plugin
             )
@@ -204,10 +232,15 @@ class Pipeline:
             documents_updated += updated
 
         if fingerprint_enabled:
+            if self._cancelled():
+                return self._stopped_result(current_tracks)
+            self._event("fingerprint", "Building fingerprints...")
             fingerprint_updated, fingerprint_skipped, fingerprint_failed = self._process_fingerprints(tracks_by_path, track_ids_by_path, jm, fingerprint_plugin, cfg.get("analysisWorkers", 1))
             documents_updated += fingerprint_updated
 
         deleted = set() if document_only else set(previous_tracks) - set(current_tracks) - replaced_track_ids
+        if self._cancelled():
+            return self._stopped_result(current_tracks)
         if not document_only and current_tracks != previous_tracks:
             manifest_manager.save(current_tracks)
 
@@ -235,6 +268,8 @@ class Pipeline:
         log.info(f'Moved             : {states["moved"]}')
         log.info(f'Unchanged         : {states["unchanged"]}')
         log.info(f'Deleted           : {len(deleted)}')
+        self._event("complete", f"Completed analysis for {len(current_tracks)} tracks.")
+        return {"status": "complete", "tracks": len(current_tracks), "documentsUpdated": documents_updated}
 
     @staticmethod
     def _load_rekordbox_matcher(xml_path, log):
