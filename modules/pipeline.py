@@ -199,10 +199,10 @@ class Pipeline:
             )
         if rekordbox_library_enabled and rekordbox_playlists:
             sources = []
-            for index, playlist in enumerate(rekordbox_playlists):
+            for playlist in rekordbox_playlists:
                 track_ids = [track_ids_by_path.get(self._normalise_path(location)) for location in playlist.track_locations]
                 sources.append({
-                    "id": f"rekordbox-{index}", "name": playlist.name, "source": "rekordbox",
+                    "id": PlaylistStore.rekordbox_source_id(playlist.name), "name": playlist.name, "source": "rekordbox",
                     "trackIds": [track_id for track_id in track_ids if track_id],
                     "unmatchedCount": sum(track_id is None for track_id in track_ids),
                 })

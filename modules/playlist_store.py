@@ -20,8 +20,29 @@ class PlaylistStore:
 
     def all_playlists(self):
         local = self.local_playlists()
+        # Older imports used the playlist's XML position as its source ID. A newly
+        # inserted Rekordbox playlist shifted those positions and could hide the
+        # wrong source behind a local editable copy. Repair copies by stable name.
+        sources = self.source_playlists()
+        source_by_name = {item.get("name"): item for item in sources}
+        changed = False
+        for item in local:
+            if item.get("source") != "rekordbox-copy":
+                continue
+            source = source_by_name.get(item.get("name"))
+            if source and item.get("sourceId") != source.get("id"):
+                item["sourceId"] = source["id"]
+                changed = True
+        if changed:
+            self._write(self.local_path, {"playlists": local})
         edited_sources = {item.get("sourceId") for item in local if item.get("source") == "rekordbox-copy"}
-        return [item for item in self.source_playlists() if item.get("id") not in edited_sources] + local
+        return [item for item in sources if item.get("id") not in edited_sources] + local
+
+    @staticmethod
+    def rekordbox_source_id(name):
+        """A source playlist ID that survives XML reordering and insertion."""
+        import hashlib
+        return "rekordbox-" + hashlib.sha256(str(name).encode("utf-8")).hexdigest()[:16]
 
     def save_sources(self, playlists):
         self._write(self.source_path, {"playlists": playlists})

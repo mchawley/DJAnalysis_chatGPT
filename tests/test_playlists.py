@@ -74,6 +74,23 @@ class PlaylistStoreTest(unittest.TestCase):
             self.assertEqual(store.local_playlists(), [])
             self.assertEqual(SegmentSelectionStore(output).excluded("one"), {0})
 
+    def test_reorders_rekordbox_sources_without_hiding_new_playlist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output" / "tracks"
+            store = PlaylistStore(output)
+            old_id = "rekordbox-0"
+            copy = store._playlist("One Hour", "rekordbox-copy", ["one"], old_id)
+            store._write(store.local_path, {"playlists": [copy]})
+            new_id = PlaylistStore.rekordbox_source_id("All Melodic")
+            one_hour_id = PlaylistStore.rekordbox_source_id("One Hour")
+            store.save_sources([
+                {"id": new_id, "name": "All Melodic", "source": "rekordbox", "trackIds": ["new"]},
+                {"id": one_hour_id, "name": "One Hour", "source": "rekordbox", "trackIds": ["one"]},
+            ])
+            playlists = store.all_playlists()
+            self.assertIn("All Melodic", [item["name"] for item in playlists])
+            self.assertEqual(store.local_playlists()[0]["sourceId"], one_hour_id)
+
 
 class PlaylistApiTest(unittest.TestCase):
     def setUp(self):
