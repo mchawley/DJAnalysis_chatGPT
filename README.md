@@ -28,7 +28,7 @@ CrateIQ does not modify your audio files, Rekordbox database, or exported XML. I
 Open **Terminal** on macOS (Applications → Utilities → Terminal), then go to the folder containing this project. For example:
 
 ```bash
-cd /path/to/DJAnalysis_chatGPT
+cd /path/to/DJPlaylistAnalysis
 ```
 
 Create a private Python environment for CrateIQ:
@@ -56,7 +56,7 @@ You only need to create the environment and install packages once per copy of th
 Whenever you want to use CrateIQ, open Terminal, go to the project folder, activate the environment, and start the local app:
 
 ```bash
-cd /path/to/DJAnalysis_chatGPT
+cd /path/to/DJPlaylistAnalysis
 source .venv/bin/activate
 python ui.py
 ```
