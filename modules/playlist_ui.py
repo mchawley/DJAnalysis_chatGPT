@@ -17,3 +17,39 @@ async function setSegment(trackId,segmentIndex,included){await request('/api/seg
 $('playlist').addEventListener('change',e=>{current=e.target.value;saveCurrent();load()});$('new').addEventListener('click',async()=>{let name=prompt('Playlist name');if(!name)return;let value=await request('/api/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create',name,track_ids:[]})});await refresh(value.id)});$('rename').addEventListener('click',async()=>{if(!detail)return;let name=prompt('Playlist name',detail.name);if(!name)return;let value=await request('/api/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',playlist_id:current,name})});await refresh(value.id)});$('restore').addEventListener('click',async()=>{let value=await request('/api/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'restore',playlist_id:current})});if(value.id)await refresh(value.id)});$('delete').addEventListener('click',async()=>{if(!confirm('Delete this local playlist?'))return;await request('/api/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',playlist_id:current})});current='';localStorage.removeItem('crateiq-playlist-id');await refresh()});
 function renderSearch(){let q=$('search').value.toLowerCase(),items=catalog.filter(t=>`${t.title} ${t.artist}`.toLowerCase().includes(q)).slice(0,25);$('results').innerHTML=items.map(t=>`<label class="pick"><input type="checkbox" data-id="${t.id}" ${chosen.includes(t.id)?'checked':''}><span>${esc(t.title)}<br><small>${esc(t.artist)}</small></span></label>`).join('');$('results').querySelectorAll('input').forEach(box=>box.addEventListener('change',()=>{chosen=box.checked?[...chosen,box.dataset.id]:chosen.filter(id=>id!==box.dataset.id);renderChosen();renderSearch()}))}function renderChosen(){$('selected').innerHTML=chosen.map((id,i)=>{let t=catalog.find(x=>x.id===id);return `<div class="pick">${i+1}. ${esc(t?.title||id)}</div>`}).join('')}$('search').addEventListener('input',renderSearch);$('create').addEventListener('click',async()=>{if(!chosen.length)return;let name=prompt('Playlist name');if(!name)return;let value=await request('/api/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create',name,track_ids:chosen})});chosen=[];renderChosen();await refresh(value.id)});boot();
 </script></body></html>'''
+
+# Added separately so the original compact deck remains dependency-free.
+PLAYLIST_HTML += r'''<script>
+(()=>{
+  const controls=document.querySelector('.controls');
+  if(!controls)return;
+  const sort=document.createElement('div');
+  sort.className='controls';
+  sort.style.width='100%';
+  sort.style.marginTop='10px';
+  sort.innerHTML=`<span class="muted">Sort local order:</span>
+    <select id="sort-primary" aria-label="Primary sort"><option value="energy">Energy</option><option value="bass">Bass</option><option value="brightness">Brightness</option><option value="rhythm">Rhythm density</option><option value="tempo">Tempo</option></select>
+    <select id="sort-secondary" aria-label="Secondary sort"><option value="">No tiebreaker</option><option value="energy">Energy</option><option value="bass">Bass</option><option value="brightness">Brightness</option><option value="rhythm">Rhythm density</option><option value="tempo">Tempo</option></select>
+    <select id="sort-direction" aria-label="Sort direction"><option value="asc">Low to high</option><option value="desc">High to low</option></select>
+    <button id="sort-playlist">Apply sort</button>`;
+  controls.after(sort);
+  const value=(track,key)=>key==='tempo'?track.bpm:track.features?.[key];
+  document.getElementById('sort-playlist').addEventListener('click',async()=>{
+    if(!detail?.tracks?.length)return;
+    const primary=document.getElementById('sort-primary').value;
+    const secondary=document.getElementById('sort-secondary').value;
+    const direction=document.getElementById('sort-direction').value==='desc'?-1:1;
+    const ordered=detail.tracks.map((track,index)=>({track,index})).sort((left,right)=>{
+      for(const key of [primary,secondary].filter(Boolean)){
+        const first=value(left.track,key),second=value(right.track,key);
+        const firstMissing=!Number.isFinite(first),secondMissing=!Number.isFinite(second);
+        if(firstMissing!==secondMissing)return firstMissing?1:-1;
+        if(!firstMissing&&first!==second)return (first-second)*direction;
+      }
+      return left.index-right.index;
+    });
+    const result=await request('/api/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',playlist_id:current,entry_ids:ordered.map(item=>item.track.entryId)})});
+    if(result.id)await refresh(result.id);
+  });
+})();
+</script>'''

@@ -71,12 +71,18 @@ class PlaylistStore:
             source = next((item for item in self.source_playlists() if item["id"] == playlist_id), None)
             if source is None:
                 return None
-            playlist = self._playlist(source["name"], "rekordbox-copy", source.get("trackIds", []), source["id"])
-            if entry_ids is not None:
+            playlist = next((item for item in playlists if item.get("source") == "rekordbox-copy" and item.get("sourceId") == source["id"]), None)
+            if playlist is None:
+                playlist = self._playlist(source["name"], "rekordbox-copy", source.get("trackIds", []), source["id"])
+                if entry_ids is not None:
+                    source_entries = self.entries(source)
+                    copied_ids = {original["id"]: copied["id"] for original, copied in zip(source_entries, playlist["entries"])}
+                    entry_ids = [copied_ids[item_id] for item_id in entry_ids if item_id in copied_ids]
+                playlists.append(playlist)
+            elif entry_ids is not None:
                 source_entries = self.entries(source)
-                copied_ids = {original["id"]: copied["id"] for original, copied in zip(source_entries, playlist["entries"])}
+                copied_ids = {original["id"]: copied["id"] for original, copied in zip(source_entries, self.entries(playlist))}
                 entry_ids = [copied_ids[item_id] for item_id in entry_ids if item_id in copied_ids]
-            playlists.append(playlist)
         self._materialize_entries(playlist)
         if name is not None:
             playlist["name"] = str(name).strip() or playlist["name"]

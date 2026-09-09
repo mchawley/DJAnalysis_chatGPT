@@ -27,6 +27,15 @@ class PlaylistStoreTest(unittest.TestCase):
             self.assertEqual(copy["trackIds"], ["two", "one"])
             self.assertEqual(store.source_playlists()[0]["trackIds"], ["one", "two"])
 
+    def test_reuses_existing_local_copy_for_repeated_source_edits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = PlaylistStore(Path(directory) / "output" / "tracks")
+            store.save_sources([{"id": "rekordbox-set", "name": "Warmup", "source": "rekordbox", "trackIds": ["one", "two"]}])
+            first = store.update("rekordbox-set", track_ids=["two", "one"])
+            second = store.update("rekordbox-set", track_ids=["one", "two"])
+            self.assertEqual(first["id"], second["id"])
+            self.assertEqual(len(store.local_playlists()), 1)
+
     def test_custom_playlist_preserves_selected_order(self):
         with tempfile.TemporaryDirectory() as directory:
             store = PlaylistStore(Path(directory) / "output" / "tracks")
