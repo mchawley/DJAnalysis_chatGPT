@@ -146,6 +146,11 @@ class InsightsHandlerTest(unittest.TestCase):
         self.assertIn('id="sort-playlist"', PLAYLIST_HTML)
         self.assertIn("entry_ids:ordered.map", PLAYLIST_HTML)
 
+    def test_playlist_ui_can_append_the_selected_tracks_to_the_open_playlist(self):
+        from modules.playlist_ui import PLAYLIST_HTML
+        self.assertIn('id="add"', PLAYLIST_HTML)
+        self.assertIn("playlist_id:current,track_ids:[...detail.tracks.map(track=>track.id),...chosen]", PLAYLIST_HTML)
+
     def test_playlist_update_endpoint_accepts_stable_entry_order(self):
         server = Path("ui.py").read_text(encoding="utf-8")
         self.assertIn('payload.get("entry_ids")', server)
