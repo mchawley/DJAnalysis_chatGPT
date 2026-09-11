@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 from modules.fingerprint import FingerprintSimilarityEngine
 from modules.fingerprint.storage import display_values
 from modules.playlist_store import PlaylistStore
+from modules.playlist_sorter import PlaylistSorter
 from modules.playlist_ui import PLAYLIST_HTML
 from modules.segment_store import SegmentSelectionStore
 from modules.setup_service import SetupService
@@ -84,6 +85,11 @@ class InsightsHandler(BaseHTTPRequestHandler):
         if request.path == "/api/playlist":
             playlist_id = parse_qs(request.query).get("playlist_id", [""])[0]
             return self._json(self._playlist_detail(playlist_id))
+        if request.path == "/api/playlist/proposal":
+            query = parse_qs(request.query)
+            playlist_id = query.get("playlist_id", [""])[0]
+            curve = query.get("curve", ["linear"])[0]
+            return self._json(self._playlist_proposal(playlist_id, curve))
         if request.path == "/api/segments":
             track_id = parse_qs(request.query).get("track_id", [""])[0]
             path = self.output_root / f"{track_id}.json"
@@ -242,6 +248,15 @@ class InsightsHandler(BaseHTTPRequestHandler):
             "trends": {key: self._normalize([track["features"].get(key) for track in playable]) for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
             "raw_trends": {key: [track["features"].get(key) for track in playable] for key in ("energy", "bass", "rhythm", "brightness", "tempo")},
         }
+
+    def _playlist_proposal(self, playlist_id, curve):
+        """Return a suggested order only; no playlist data is changed here."""
+        if curve not in {"linear", "u", "s"}:
+            return {"error": "Unknown energy shape. Choose linear, u, or s.", "tracks": []}
+        detail = self._playlist_detail(playlist_id)
+        if not detail.get("tracks"):
+            return {"error": "Playlist not found or has no tracks.", "tracks": []}
+        return PlaylistSorter(self._compatible_keys).propose(detail["tracks"], curve)
 
     def _playlist_track(self, track_id, entry_id, excluded_indexes=()):
         path = self.output_root / f"{track_id}.json"

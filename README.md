@@ -139,6 +139,10 @@ Open **Playlists** to view imported Rekordbox playlists or create a local CrateI
 - Look for transition-break or outlier badges.
 - Use segment strips to exclude phrases you do not plan to play.
 - Reorder, remove, or add tracks to local playlist copies without changing Rekordbox.
+- Use **Playlist order** to sort directly by a feature, or ask for a proposed energy shape:
+  semi-linear increase, U curve, or S curve. Proposals balance the active segments'
+  energy with entry/exit continuity, BPM distance, bass/rhythm/brightness similarity,
+  and Camelot compatibility. They are suggestions until you choose **Apply proposed order**.
 
 ## Where your information is stored
 

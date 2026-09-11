@@ -27,15 +27,48 @@ PLAYLIST_HTML += r'''<script>
   sort.className='controls';
   sort.style.width='100%';
   sort.style.marginTop='10px';
-  sort.innerHTML=`<span class="muted">Sort local order:</span>
-    <select id="sort-primary" aria-label="Primary sort"><option value="energy">Energy</option><option value="bass">Bass</option><option value="brightness">Brightness</option><option value="rhythm">Rhythm density</option><option value="tempo">Tempo</option></select>
+  sort.innerHTML=`<span class="muted">Playlist order:</span>
+    <select id="sort-mode" aria-label="Playlist ordering method"><option value="metric">Sort by a metric</option><option value="linear">Propose: rising energy curve</option><option value="u">Propose: U energy curve</option><option value="s">Propose: S energy curve</option></select>
+    <span id="metric-sort-controls"><select id="sort-primary" aria-label="Primary sort"><option value="energy">Energy</option><option value="bass">Bass</option><option value="brightness">Brightness</option><option value="rhythm">Rhythm density</option><option value="tempo">Tempo</option></select>
     <select id="sort-secondary" aria-label="Secondary sort"><option value="">No tiebreaker</option><option value="energy">Energy</option><option value="bass">Bass</option><option value="brightness">Brightness</option><option value="rhythm">Rhythm density</option><option value="tempo">Tempo</option></select>
-    <select id="sort-direction" aria-label="Sort direction"><option value="asc">Low to high</option><option value="desc">High to low</option></select>
+    <select id="sort-direction" aria-label="Sort direction"><option value="asc">Low to high</option><option value="desc">High to low</option></select></span>
     <button id="sort-playlist">Apply sort</button>`;
+  const proposal=document.createElement('div');
+  proposal.id='order-proposal';
+  proposal.className='panel';
+  proposal.hidden=true;
+  proposal.style.width='100%';
+  proposal.style.marginTop='10px';
   controls.after(sort);
+  sort.after(proposal);
   const value=(track,key)=>key==='tempo'?track.bpm:track.features?.[key];
+  const mode=()=>document.getElementById('sort-mode').value;
+  const updateControls=()=>{
+    const metric=mode()==='metric';
+    document.getElementById('metric-sort-controls').hidden=!metric;
+    document.getElementById('sort-playlist').textContent=metric?'Apply sort':'Propose order';
+    proposal.hidden=true;
+  };
+  document.getElementById('sort-mode').addEventListener('change',updateControls);
+  const proposalRows=items=>`<ol>${items.map(item=>`<li><b>${esc(item.title)}</b>${item.artist?` · ${esc(item.artist)}`:''} <span class="muted">· target ${fmt(item.target_energy)} · fit ${fmt(item.energy_fit)} · ${esc((item.transition?.reasons||[]).join(', '))}</span></li>`).join('')}</ol>`;
+  const showProposal=result=>{
+    proposal.hidden=false;
+    if(result.error){proposal.innerHTML=`<b>Could not propose an order.</b><p class="muted">${esc(result.error)}</p>`;return;}
+    const label={linear:'Semi-linear increase',u:'U curve',s:'S curve'}[result.curve]||result.curve;
+    proposal.innerHTML=`<div class="eyebrow">Suggested ${label}</div><p><b>${fmt(result.score)} overall fit</b> · This is a proposal only; applying it changes the editable local order.</p>${proposalRows(result.tracks)}<button id="apply-proposal" class="primary">Apply proposed order</button>`;
+    document.getElementById('apply-proposal').addEventListener('click',async()=>{
+      const entryIds=result.tracks.map(item=>item.entry_id).filter(Boolean);
+      const update=await request('/api/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',playlist_id:current,entry_ids:entryIds})});
+      if(update.id){proposal.hidden=true;await refresh(update.id);}
+    });
+  };
   document.getElementById('sort-playlist').addEventListener('click',async()=>{
     if(!detail?.tracks?.length)return;
+    if(mode()!=='metric'){
+      const result=await request(`/api/playlist/proposal?playlist_id=${encodeURIComponent(current)}&curve=${encodeURIComponent(mode())}`);
+      showProposal(result);
+      return;
+    }
     const primary=document.getElementById('sort-primary').value;
     const secondary=document.getElementById('sort-secondary').value;
     const direction=document.getElementById('sort-direction').value==='desc'?-1:1;
@@ -51,5 +84,6 @@ PLAYLIST_HTML += r'''<script>
     const result=await request('/api/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',playlist_id:current,entry_ids:ordered.map(item=>item.track.entryId)})});
     if(result.id)await refresh(result.id);
   });
+  updateControls();
 })();
 </script>'''

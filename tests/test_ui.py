@@ -140,11 +140,14 @@ class InsightsHandlerTest(unittest.TestCase):
 
     def test_playlist_ui_supports_metric_sorting_with_a_tiebreaker(self):
         from modules.playlist_ui import PLAYLIST_HTML
+        self.assertIn('id="sort-mode"', PLAYLIST_HTML)
         self.assertIn('id="sort-primary"', PLAYLIST_HTML)
         self.assertIn('id="sort-secondary"', PLAYLIST_HTML)
         self.assertIn('id="sort-direction"', PLAYLIST_HTML)
         self.assertIn('id="sort-playlist"', PLAYLIST_HTML)
         self.assertIn("entry_ids:ordered.map", PLAYLIST_HTML)
+        self.assertIn("/api/playlist/proposal", PLAYLIST_HTML)
+        self.assertIn('id="apply-proposal"', PLAYLIST_HTML)
 
     def test_playlist_ui_can_append_the_selected_tracks_to_the_open_playlist(self):
         from modules.playlist_ui import PLAYLIST_HTML

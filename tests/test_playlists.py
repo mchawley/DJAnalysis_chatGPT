@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from modules.playlist_store import PlaylistStore
+from modules.playlist_sorter import PlaylistSorter
 from modules.segment_store import SegmentSelectionStore
 from ui import InsightsHandler
 
@@ -101,6 +102,28 @@ class PlaylistStoreTest(unittest.TestCase):
             self.assertEqual(store.local_playlists()[0]["sourceId"], one_hour_id)
 
 
+class PlaylistSorterTest(unittest.TestCase):
+    def test_energy_shape_targets_have_the_requested_direction(self):
+        self.assertEqual(PlaylistSorter.targets("linear", 3), [.2, .6000000000000001, 1.0])
+        u_curve = PlaylistSorter.targets("u", 5)
+        self.assertGreater(u_curve[0], u_curve[2])
+        self.assertGreater(u_curve[-1], u_curve[0])
+        s_curve = PlaylistSorter.targets("s", 5)
+        self.assertLess(s_curve[0], s_curve[1])
+        self.assertLess(s_curve[2], s_curve[1])
+        self.assertGreater(s_curve[-1], s_curve[1])
+
+    def test_proposal_uses_playable_entries_once_and_keeps_skipped_entries(self):
+        tracks = [
+            {"id": "one", "entryId": "first", "title": "First", "playable": True, "features": {"energy": .1}, "entry": {}, "exit": {}},
+            {"id": "one", "entryId": "second", "title": "Repeat", "playable": True, "features": {"energy": .9}, "entry": {}, "exit": {}},
+            {"id": "skipped", "entryId": "third", "title": "Skipped", "playable": False, "features": {}},
+        ]
+        proposal = PlaylistSorter(lambda _first, _second: True).propose(tracks, "linear")
+        self.assertEqual([item["entry_id"] for item in proposal["tracks"]], ["first", "second", "third"])
+        self.assertEqual(proposal["tracks"][-1]["transition"]["reasons"], ["Skipped or analysis unavailable"])
+
+
 class PlaylistApiTest(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -139,6 +162,16 @@ class PlaylistApiTest(unittest.TestCase):
         self.assertEqual(detail["tracks"][0]["segments"][0]["normalized_rhythm"], 0.5)
         self.assertEqual(detail["tracks"][0]["segments"][0]["normalized_brightness"], 0.5)
         self.assertNotIn("transition_energy", detail["tracks"][0])
+
+    def test_energy_order_proposal_is_read_only_and_uses_active_tracks(self):
+        playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
+        original = [item["id"] for item in InsightsHandler._playlist_detail(InsightsHandler.__new__(InsightsHandler), playlist_id)["tracks"]]
+        handler = InsightsHandler.__new__(InsightsHandler)
+        proposal = handler._playlist_proposal(playlist_id, "u")
+        self.assertEqual(proposal["curve"], "u")
+        self.assertEqual(sorted(item["id"] for item in proposal["tracks"]), sorted(original))
+        unchanged = [item["id"] for item in handler._playlist_detail(playlist_id)["tracks"]]
+        self.assertEqual(unchanged, original)
 
     def test_outlier_and_transition_have_explanations(self):
         playlist_id = PlaylistStore(self.output).local_playlists()[0]["id"]
